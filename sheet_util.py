@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, cast
 import pandas as pd
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -111,7 +111,6 @@ def dataframe_to_sheet(
     df: pd.DataFrame,
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
-    include_index: bool = False,
     clear_sheet: bool = True,
 ) -> None:
     """
@@ -147,15 +146,17 @@ def dataframe_to_sheet(
     # Convert DataFrame to values list
     values: List[List[Any]] = []
 
-    if include_index:
-        headers = [df.index.name if df.index.name else "Index"] + df.columns.tolist()
-        values = [headers] + [
-            [index] + row.tolist()
-            for index, row in zip(df.index.tolist(), df.values.tolist())
-        ]
-    else:
-        headers = df.columns.tolist()
-        values = [headers] + df.values.tolist()
+    # Add headers and data - simplified approach that typechecks
+    headers: List[Any] = []
+    for col in df.columns:
+        headers.append(col)
+    values.append(headers)
+
+    for _, row in df.iterrows():
+        row_list: List[Any] = []
+        for val in row:
+            row_list.append(val)
+        values.append(row_list)
 
     # Update values
     body = {"values": values}
@@ -181,7 +182,6 @@ def append_to_sheet(
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
     include_header: bool = False,
-    include_index: bool = False,
 ) -> None:
     """
     Append rows from a pandas DataFrame to an existing Google Sheet.
@@ -218,25 +218,22 @@ def append_to_sheet(
     current_values = current_data.get("values", [])
     start_row = len(current_values) + 1  # 1-indexed for sheets API
 
-    # Convert DataFrame to values list
+    # Convert DataFrame to values list - simplified approach
     values: List[List[Any]] = []
 
     # Add headers if requested and sheet is empty
     if include_header and start_row == 1:
-        if include_index:
-            headers = [
-                df.index.name if df.index.name else "Index"
-            ] + df.columns.tolist()
-        else:
-            headers = df.columns.tolist()
+        headers: List[Any] = []
+        for col in df.columns:
+            headers.append(col)
         values.append(headers)
 
-    # Add data rows
-    if include_index:
-        for index, row in zip(df.index.tolist(), df.values.tolist()):
-            values.append([index] + row)
-    else:
-        values = df.values.tolist()
+    # Add data rows - simplified approach
+    for _, row in df.iterrows():
+        row_list: List[Any] = []
+        for val in row:
+            row_list.append(val)
+        values.append(row_list)
 
     # Append values
     body: Dict[str, List[List[Any]]] = {"values": values}
