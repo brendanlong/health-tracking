@@ -1,0 +1,3 @@
+- Don't use try/except unless we need to handle an error.
+- Use type annotations when they can't be inferred (like in function signatures).
+- Use the `black` coding style.
