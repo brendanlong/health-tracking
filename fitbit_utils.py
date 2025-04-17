@@ -1,83 +1,16 @@
 import os
 import sys
-import socket
-import webbrowser
-import threading
 import json
-import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import pandas as pd
 from fitbit.api import Fitbit
+from auth_webserver import run_oauth_flow
 
 # Get Fitbit credentials from environment variables
 CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET", "")
 TOKEN_PATH = os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json")
-
-
-class OAuthCallbackHandler(BaseHTTPRequestHandler):
-    """HTTP request handler to capture OAuth callback."""
-
-    def do_GET(self) -> None:
-        """Handle GET request containing OAuth callback."""
-        # Parse the URL and extract the code parameter
-        query_components = parse_qs(urlparse(self.path).query)
-        code = query_components.get("code", [None])[0]
-
-        if code:
-            self.server.code = code  # type: ignore
-            print(f"Authorization code received successfully")
-
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            html_content = """
-            <html>
-            <head><title>Authentication Successful</title></head>
-            <body>
-                <h1>Authentication Successful!</h1>
-                <p>You can now close this window and return to the application.</p>
-            </body>
-            </html>
-            """
-        else:
-            self.send_response(400)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            html_content = """
-            <html>
-            <head><title>Authentication Failed</title></head>
-            <body>
-                <h1>Authentication Failed</h1>
-                <p>No authorization code was received. Please try again.</p>
-            </body>
-            </html>
-            """
-
-        self.wfile.write(html_content.encode("utf-8"))
-
-    def log_message(self, format: str, *args: Any) -> None:
-        """Suppress default HTTP server logging."""
-        return
-
-
-class AuthHTTPServer(HTTPServer):
-    """A local server to receive the OAuth callback."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.code: Optional[str] = None
-
-    @classmethod
-    def run(cls, port: int) -> "AuthHTTPServer":
-        server = cls(("localhost", port), OAuthCallbackHandler)
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
-        return server
 
 
 def get_fitbit_client() -> Fitbit:
@@ -130,63 +63,38 @@ def get_fitbit_client() -> Fitbit:
     port = 8080
     redirect_uri = f"http://localhost:{port}/"
 
-    # Start the local server to receive the callback
-    server = AuthHTTPServer.run(port)
+    # Create the OAuth2 client with our local server redirect URI
+    fitbit = Fitbit(CLIENT_ID, CLIENT_SECRET, redirect_uri=redirect_uri, timeout=10)
 
-    try:
-        # Create the OAuth2 client with our local server redirect URI
-        fitbit = Fitbit(CLIENT_ID, CLIENT_SECRET, redirect_uri=redirect_uri, timeout=10)
+    # Generate authorization URL
+    auth_url, _ = fitbit.client.authorize_token_url()
 
-        # Generate authorization URL
-        auth_url, _ = fitbit.client.authorize_token_url()
+    # Run the OAuth flow
+    auth_code = run_oauth_flow(auth_url, port=port)
 
-        # Open the browser to the authorization URL
-        print("\nOpening browser for Fitbit authorization...")
-        webbrowser.open(auth_url)
+    # Check if we got the authorization code
+    if auth_code is None:
+        raise TimeoutError("Error: Timed out waiting for authorization.")
 
-        # Wait for the callback to be received
-        print("Waiting for authorization to complete...")
+    # Exchange authorization code for tokens
+    fitbit.client.fetch_access_token(auth_code)
 
-        # Wait for the server to receive the callback
-        max_wait_seconds = 300  # 5 minutes timeout
-        waited = 0
-        while server.code is None and waited < max_wait_seconds:
-            time.sleep(1)
-            waited += 1
-            # Print a message every 30 seconds
-            if waited % 30 == 0:
-                print(f"Still waiting for authorization... ({waited} seconds)")
+    # Save the token for future use
+    token_data = {
+        "access_token": fitbit.client.session.token.get("access_token"),
+        "refresh_token": fitbit.client.session.token.get("refresh_token"),
+        "expires_at": fitbit.client.session.token.get("expires_at"),
+    }
 
-        # Check if we got the authorization code
-        if server.code is None:
-            raise TimeoutError("Error: Timed out waiting for authorization.")
+    # Make sure the credentials directory exists
+    os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
 
-        print("Authorization code received successfully!")
+    # Save the token
+    with open(TOKEN_PATH, "w") as token_file:
+        json.dump(token_data, token_file)
+        print(f"Credentials saved to {TOKEN_PATH}")
 
-        # Exchange authorization code for tokens
-        fitbit.client.fetch_access_token(server.code)
-
-        # Save the token for future use
-        token_data = {
-            "access_token": fitbit.client.session.token.get("access_token"),
-            "refresh_token": fitbit.client.session.token.get("refresh_token"),
-            "expires_at": fitbit.client.session.token.get("expires_at"),
-        }
-
-        # Make sure the credentials directory exists
-        os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
-
-        # Save the token
-        with open(TOKEN_PATH, "w") as token_file:
-            json.dump(token_data, token_file)
-            print(f"Credentials saved to {TOKEN_PATH}")
-
-        return fitbit
-
-    finally:
-        # Shutdown the server
-        server.shutdown()
-        server.server_close()
+    return fitbit
 
 
 def get_sleep_data(
