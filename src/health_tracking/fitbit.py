@@ -192,3 +192,71 @@ def get_sleep_data(
         df = df.sort_values(["date", "is_main_sleep"], ascending=[True, False])
 
     return df
+
+
+def get_resting_heart_rate(
+    client: Fitbit,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    days: int = 30,
+) -> pd.DataFrame:
+    """
+    Fetch resting heart rate data from Fitbit API and convert to a Pandas DataFrame.
+
+    Args:
+        client: Authenticated Fitbit client
+        start_date: Start date (YYYY-MM-DD format) for fetching data, defaults to 'days' ago
+        end_date: End date (YYYY-MM-DD format) for fetching data, defaults to today
+        days: Number of days to fetch if start_date is not specified, defaults to 30
+
+    Returns:
+        DataFrame with daily resting heart rate data
+    """
+    # Set default dates if not provided
+    if end_date is None:
+        end_date_dt = datetime.now()
+    else:
+        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    if start_date is None:
+        start_date_dt = datetime.now() - timedelta(days=days)
+    else:
+        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d")
+
+    # Format dates for API
+    start_date_str = start_date_dt.strftime("%Y-%m-%d")
+    end_date_str = end_date_dt.strftime("%Y-%m-%d")
+
+    print(
+        f"Fetching resting heart rate data from {start_date_str} to {end_date_str}..."
+    )
+
+    # The Fitbit API endpoint for heart rate time series
+    heart_data = client.time_series(
+        resource="activities/heart", base_date=start_date_str, end_date=end_date_str
+    )
+
+    # Initialize empty list to store the records
+    records = []
+
+    # Extract data from response
+    for day in heart_data.get("activities-heart", []):
+        date = day.get("dateTime")
+        value = day.get("value", {})
+
+        # Extract resting heart rate if available
+        resting_hr = value.get("restingHeartRate")
+
+        # Only add records that have a resting heart rate value
+        if resting_hr is not None:
+            records.append({"date": date, "resting_heart_rate": resting_hr})
+
+    # Convert to DataFrame
+    df = pd.DataFrame(records)
+
+    # Convert date column to datetime
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date")
+
+    return df

@@ -5,12 +5,26 @@ import argparse
 import pandas as pd
 
 sys.path.insert(0, "src")
-from health_tracking.fitbit import get_fitbit_client, get_sleep_data
+from health_tracking.fitbit import (
+    get_fitbit_client,
+    get_sleep_data,
+    get_resting_heart_rate,
+)
 
 
 def main() -> None:
-    """Command-line interface to fetch and save Fitbit sleep data."""
-    parser = argparse.ArgumentParser(description="Fetch Fitbit sleep data")
+    """Command-line interface to fetch and save Fitbit data."""
+    parser = argparse.ArgumentParser(description="Fetch Fitbit data")
+
+    # Data type argument
+    parser.add_argument(
+        "--type",
+        type=str,
+        choices=["sleep", "heart-rate"],
+        default="sleep",
+        help="Type of data to fetch (sleep or heart-rate)",
+    )
+
     parser.add_argument(
         "--days",
         type=int,
@@ -23,26 +37,37 @@ def main() -> None:
     # Get authenticated client
     client = get_fitbit_client()
 
-    # Fetch sleep data
-    print(f"Fetching sleep data for the past {args.days} days...")
-    sleep_df = get_sleep_data(client, days=args.days)
+    if args.type == "sleep":
+        # Fetch sleep data
+        print(f"Fetching sleep data for the past {args.days} days...")
+        data_df = get_sleep_data(client, days=args.days)
 
-    # Display summary
-    print(f"\nRetrieved {len(sleep_df)} sleep records")
-    if not sleep_df.empty:
+        # Display summary
+        print(f"\nRetrieved {len(data_df)} sleep records")
+
+    elif args.type == "heart-rate":
+        # Fetch resting heart rate data
+        print(f"Fetching resting heart rate data for the past {args.days} days...")
+        data_df = get_resting_heart_rate(client, days=args.days)
+
+        # Display summary
+        print(f"\nRetrieved {len(data_df)} heart rate records")
+
+    # Show date range for either data type
+    if not data_df.empty:
         print(
-            f"Date range: {sleep_df['date'].min().date()} to {sleep_df['date'].max().date()}"
+            f"Date range: {data_df['date'].min().date()} to {data_df['date'].max().date()}"
         )
 
     # Save to CSV if requested
     if args.csv_out:
-        sleep_df.to_csv(args.csv_out, index=False)
-        print(f"Sleep data saved to {args.csv_out}")
+        data_df.to_csv(args.csv_out, index=False)
+        print(f"Data saved to {args.csv_out}")
     else:
         # Print a preview of the data
         pd.set_option("display.max_columns", None)
         print("\nData preview:")
-        print(sleep_df.head())
+        print(data_df.head())
 
 
 if __name__ == "__main__":
