@@ -9,3 +9,6 @@ pip install -r requirements.txt
 
 # Install additional packages for type checking
 mypy --install-types --non-interactive
+
+# Install pre-commit hooks
+pre-commit install
