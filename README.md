@@ -55,7 +55,7 @@ source venv/bin/activate
 Extract sleep data from your Fitbit account:
 
 ```bash
-python fitbit_utils.py --days 30 --csv-out sleep_data.csv
+./bin/fitbit-data --days 30 --csv-out sleep_data.csv
 ```
 
 Options:
@@ -64,12 +64,12 @@ Options:
 
 ### Google Sheets Integration
 
-The `sheet_util.py` script provides several ways to work with Google Sheets:
+The `./bin/sheets-upload` script provides several ways to work with Google Sheets:
 
 #### Create a new spreadsheet and upload data
 
 ```bash
-python sheet_util.py --create "My Health Data" --csv-to-sheet sleep_data.csv
+./bin/sheets-upload --create "My Health Data" --csv-to-sheet sleep_data.csv
 ```
 
 This creates a new spreadsheet and saves the spreadsheet ID in the console output, which you should save for future use.
@@ -77,19 +77,19 @@ This creates a new spreadsheet and saves the spreadsheet ID in the console outpu
 #### Append new data to an existing spreadsheet
 
 ```bash
-python sheet_util.py --spreadsheet-id "your_spreadsheet_id" --append-csv new_data.csv
+./bin/sheets-upload --spreadsheet-id "your_spreadsheet_id" --append-csv new_data.csv
 ```
 
 #### Create a new worksheet in an existing spreadsheet
 
 ```bash
-python sheet_util.py --spreadsheet-id "your_spreadsheet_id" --sheet-name "New Sheet" --create-sheet
+./bin/sheets-upload --spreadsheet-id "your_spreadsheet_id" --sheet-name "New Sheet" --create-sheet
 ```
 
 #### Upload data to a specific worksheet
 
 ```bash
-python sheet_util.py --spreadsheet-id "your_spreadsheet_id" --sheet-name "Sheet Name" --csv-to-sheet data.csv
+./bin/sheets-upload --spreadsheet-id "your_spreadsheet_id" --sheet-name "Sheet Name" --csv-to-sheet data.csv
 ```
 
 ## Authentication Flow
@@ -116,3 +116,19 @@ When you run the Google Sheets script for the first time:
 ## Adding More Data Sources
 
 Support for additional fitness trackers and health data sources is planned for future releases.
+
+## Project Structure
+
+```
+health-tracking/
+├── bin/                     # Executable scripts
+├── credentials/             # API credentials (gitignored)
+├── src/                     # Source code
+│   └── health_tracking/     # Main package
+│       ├── __init__.py      # Package metadata
+│       ├── auth.py          # OAuth authentication
+│       ├── fitbit.py        # Fitbit API interaction
+│       └── sheets.py        # Google Sheets integration
+├── setup.py                 # Package installation config
+└── setup.sh                 # Environment setup script
+```
