@@ -12,6 +12,7 @@ from health_tracking.auth import run_oauth_flow
 CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET", "")
 TOKEN_PATH = os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json")
+Fitbit.API_VERSION = 1.2
 
 
 def get_fitbit_client() -> Fitbit:
@@ -127,57 +128,60 @@ def get_sleep_data(
     else:
         start_date_dt = datetime.strptime(start_date, "%Y-%m-%d")
 
+    # Format dates for API
+    start_date_str = start_date_dt.strftime("%Y-%m-%d")
+    end_date_str = end_date_dt.strftime("%Y-%m-%d")
+
+    print(f"Fetching sleep data from {start_date_str} to {end_date_str}...")
+
+    # Fetch sleep logs for date range in one API call
+    sleep_range_data = client.time_series(
+        resource="sleep", base_date=start_date_str, end_date=end_date_str
+    )
+
     # Initialize empty lists to store data
     all_records: List[Dict[str, Any]] = []
 
-    # Loop through each date in the range
-    current_date = start_date_dt
-    while current_date <= end_date_dt:
-        date_str = current_date.strftime("%Y-%m-%d")
-        print(f"Fetching sleep data for {date_str}...")
+    # Process each sleep log in the response
+    for sleep in sleep_range_data.get("sleep", []):
+        # Extract basic sleep data
+        date = sleep.get("dateOfSleep")
+        start_time = sleep.get("startTime")
+        end_time = sleep.get("endTime")
+        duration_mins = (
+            sleep.get("duration") / 60000 if sleep.get("duration") else 0
+        )  # Convert from ms to minutes
+        efficiency = sleep.get("efficiency")
+        is_main_sleep = sleep.get("isMainSleep")
+        minutes_asleep = sleep.get("minutesAsleep")
+        minutes_awake = sleep.get("minutesAwake")
+        time_in_bed = sleep.get("timeInBed")
 
-        # Fetch sleep logs data for this date
-        sleep_data: Dict[str, Any] = client.sleep(date=date_str)
+        # Extract sleep stages if available
+        stages = {}
+        levels = sleep.get("levels", {})
+        summary = levels.get("summary", {})
 
-        # Extract top-level summary data for sleep stages
-        top_summary: Dict[str, Any] = sleep_data.get("summary", {})
-        top_stages: Dict[str, int] = top_summary.get("stages", {})
+        for stage in ["deep", "light", "rem", "wake"]:
+            stage_data = summary.get(stage, {})
+            if isinstance(stage_data, dict):
+                stages[f"{stage}_minutes"] = stage_data.get("minutes", 0)
 
-        # Process each sleep log
-        for sleep in sleep_data.get("sleep", []):
-            # Extract basic sleep data
-            date = sleep.get("dateOfSleep")
-            start_time = sleep.get("startTime")
-            end_time = sleep.get("endTime")
-            duration_mins = sleep.get("duration") / 60000  # Convert from ms to minutes
-            efficiency = sleep.get("efficiency")
-            is_main_sleep = sleep.get("isMainSleep")
-            minutes_asleep = sleep.get("minutesAsleep")
-            minutes_awake = sleep.get("minutesAwake")
-            time_in_bed = sleep.get("timeInBed")
+        # Create a record with all available data
+        record = {
+            "date": date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration_mins": duration_mins,
+            "efficiency": efficiency,
+            "is_main_sleep": is_main_sleep,
+            "minutes_asleep": minutes_asleep,
+            "minutes_awake": minutes_awake,
+            "time_in_bed": time_in_bed,
+            **stages,
+        }
 
-            # Create a base record without sleep stages
-            record = {
-                "date": date,
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration_mins": duration_mins,
-                "efficiency": efficiency,
-                "is_main_sleep": is_main_sleep,
-                "minutes_asleep": minutes_asleep,
-                "minutes_awake": minutes_awake,
-                "time_in_bed": time_in_bed,
-            }
-
-            # Add sleep stage data if this is the main sleep and we have top-level summary
-            if is_main_sleep and top_stages:
-                for stage in ["deep", "light", "rem", "wake"]:
-                    record[f"{stage}_minutes"] = top_stages.get(stage, 0)
-
-            all_records.append(record)
-
-        # Move to next day
-        current_date += timedelta(days=1)
+        all_records.append(record)
 
     # Convert to DataFrame
     df = pd.DataFrame(all_records)
