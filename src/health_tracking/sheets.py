@@ -1,62 +1,56 @@
 import os
-import sys
+from pathlib import Path
 import json
-from typing import List, Optional, Any, Dict, cast
+from typing import List, Any, Optional
 import pandas as pd
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build, Resource
+from googleapiclient.errors import HttpError
 
 # Set up OAuth 2.0 scopes for Google Sheets access
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Get credentials path from environment variables (optional)
-CREDENTIALS_PATH = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials/google.json")
-TOKEN_PATH = os.environ.get("GOOGLE_TOKEN_PATH", "credentials/google_token.json")
+CREDENTIALS_PATH = Path(
+    os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials/google.json")
+)
+TOKEN_PATH = Path(os.environ.get("GOOGLE_TOKEN_PATH", "credentials/google_token.json"))
 
 
-def get_sheets_client() -> Resource:
+def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> Resource:
     """
     Get authenticated Google Sheets client using OAuth 2.0.
 
     Returns:
         A configured Google Sheets API service resource.
     """
-    creds = None
 
-    # Check if we have a token file
-    if os.path.exists(TOKEN_PATH):
-        with open(TOKEN_PATH, "r") as token_file:
-            creds = Credentials.from_authorized_user_info(json.load(token_file), SCOPES)
+    try:
+        with TOKEN_PATH.open("r") as f:
+            creds = Credentials.from_authorized_user_info(json.load(f), SCOPES)
+    except FileNotFoundError:
+        if not credentials_path.exists():
+            raise ValueError(
+                f"Error: Google API credentials file not found at {credentials_path}."
+                "Please create a project in Google Cloud Console, enable the Sheets API,"
+                "and download the OAuth 2.0 credentials to this location."
+            )
+
+        # Start the OAuth flow
+        flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
+        creds = flow.run_local_server(port=0)
 
     # If credentials don't exist or are invalid, let the user authorize
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    if not creds.valid:
+        if creds is not None and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-        else:
-            # Check for credentials file
-            if not os.path.exists(CREDENTIALS_PATH):
-                print(
-                    f"Error: Google API credentials file not found at {CREDENTIALS_PATH}."
-                )
-                print(
-                    "Please create a project in Google Cloud Console, enable the Sheets API,"
-                )
-                print("and download the OAuth 2.0 credentials to this location.")
-                sys.exit(1)
 
-            # Start the OAuth flow
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        # Make sure the credentials directory exists
-        os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
-
-        # Save the credentials for future use
-        with open(TOKEN_PATH, "w") as token:
-            token.write(creds.to_json())
-            print(f"Credentials saved to {TOKEN_PATH}")
+    # Make sure the credentials directory exists
+    TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Save the credentials for future use
+    TOKEN_PATH.write_text(creds.to_json())
 
     # Build and return the sheets service
     return build("sheets", "v4", credentials=creds)
@@ -80,7 +74,7 @@ def create_spreadsheet(sheets: Resource, title: str) -> str:
     return spreadsheet_id
 
 
-def create_sheet(sheets: Resource, spreadsheet_id: str, sheet_name: str) -> None:
+def ensure_sheet_exists(sheets: Resource, spreadsheet_id: str, sheet_name: str) -> None:
     """
     Add a new worksheet to an existing spreadsheet.
 
@@ -109,77 +103,8 @@ def dataframe_to_sheet(
     df: pd.DataFrame,
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
-    clear_sheet: bool = True,
-) -> None:
-    """
-    Write a pandas DataFrame to a Google Sheet.
-
-    Args:
-        sheets: Authenticated Google Sheets client
-        df: Pandas DataFrame to write
-        spreadsheet_id: ID of the target spreadsheet
-        sheet_name: Name of the target worksheet
-        include_index: Whether to include the DataFrame index
-        clear_sheet: Whether to clear existing data in the sheet
-    """
-    # Check if sheet exists, create it if not
-    sheet_metadata = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheets_list = sheet_metadata.get("sheets", [])
-    sheet_exists = False
-
-    for sheet in sheets_list:
-        if sheet["properties"]["title"] == sheet_name:
-            sheet_exists = True
-            break
-
-    if not sheet_exists:
-        create_sheet(sheets, spreadsheet_id, sheet_name)
-
-    # Clear the sheet if requested
-    if clear_sheet:
-        sheets.spreadsheets().values().clear(
-            spreadsheetId=spreadsheet_id, range=sheet_name
-        ).execute()
-
-    # Convert DataFrame to values list
-    values: List[List[Any]] = []
-
-    # Add headers and data - simplified approach that typechecks
-    headers: List[Any] = []
-    for col in df.columns:
-        headers.append(col)
-    values.append(headers)
-
-    for _, row in df.iterrows():
-        row_list: List[Any] = []
-        for val in row:
-            row_list.append(val)
-        values.append(row_list)
-
-    # Update values
-    body = {"values": values}
-
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .update(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A1",
-            valueInputOption="RAW",
-            body=body,
-        )
-        .execute()
-    )
-
-    print(f"{result.get('updatedCells')} cells updated in {sheet_name}")
-
-
-def append_to_sheet(
-    sheets: Resource,
-    df: pd.DataFrame,
-    spreadsheet_id: str,
-    sheet_name: str = "Sheet1",
     include_header: bool = False,
+    start_row: int = 1,
 ) -> None:
     """
     Append rows from a pandas DataFrame to an existing Google Sheet.
@@ -192,49 +117,18 @@ def append_to_sheet(
         include_header: Whether to include column headers
         include_index: Whether to include the DataFrame index
     """
-    # Check if sheet exists, create it if not
-    sheet_metadata = sheets.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheets_list = sheet_metadata.get("sheets", [])
-    sheet_exists = False
+    ensure_sheet_exists(sheets, spreadsheet_id, sheet_name)
 
-    for sheet in sheets_list:
-        if sheet["properties"]["title"] == sheet_name:
-            sheet_exists = True
-            break
-
-    if not sheet_exists:
-        create_sheet(sheets, spreadsheet_id, sheet_name)
-
-    # Get the current values to determine where to append
-    current_data = (
-        sheets.spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A:A")
-        .execute()
-    )
-
-    current_values = current_data.get("values", [])
-    start_row = len(current_values) + 1  # 1-indexed for sheets API
-
-    # Convert DataFrame to values list - simplified approach
+    # Convert DataFrame to values list
     values: List[List[Any]] = []
+    if include_header:
+        values.append(list(df.columns))
 
-    # Add headers if requested and sheet is empty
-    if include_header and start_row == 1:
-        headers: List[Any] = []
-        for col in df.columns:
-            headers.append(col)
-        values.append(headers)
-
-    # Add data rows - simplified approach
     for _, row in df.iterrows():
-        row_list: List[Any] = []
-        for val in row:
-            row_list.append(val)
-        values.append(row_list)
+        values.append(list(row))
 
-    # Append values
-    body: Dict[str, List[List[Any]]] = {"values": values}
+    # Update values
+    body = {"values": values}
 
     result = (
         sheets.spreadsheets()
@@ -252,6 +146,52 @@ def append_to_sheet(
     updates = result.get("updates", {})
     updated_cells = updates.get("updatedCells", 0)
     print(f"{updated_cells} cells appended to {sheet_name}")
+
+
+def append_to_sheet(
+    sheets: Resource,
+    df: pd.DataFrame,
+    spreadsheet_id: str,
+    sheet_name: str = "Sheet1",
+    include_header_if_new: bool = True,
+) -> None:
+    """
+    Append rows from a pandas DataFrame to an existing Google Sheet.
+
+    Args:
+        sheets: Authenticated Google Sheets client
+        df: Pandas DataFrame with rows to append
+        spreadsheet_id: ID of the target spreadsheet
+        sheet_name: Name of the target worksheet
+        include_header: Whether to include column headers
+        include_index: Whether to include the DataFrame index
+    """
+    try:
+        # Get the current values to determine where to append
+        current_data = (
+            sheets.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A:A")
+            .execute()
+        )
+
+        current_values = current_data.get("values", [])
+        start_row = len(current_values) + 1  # 1-indexed for sheets API
+    except HttpError as e:
+        # The sheet doesn't exist
+        if "Unable to parse range" in e.reason:
+            start_row = 1
+        else:
+            raise
+
+    return dataframe_to_sheet(
+        sheets,
+        df,
+        spreadsheet_id,
+        sheet_name,
+        include_header=(include_header_if_new and start_row == 1),
+        start_row=start_row,
+    )
 
 
 def sheet_to_dataframe(

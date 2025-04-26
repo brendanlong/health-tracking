@@ -1,12 +1,9 @@
-import os
-import sys
-import socket
 import webbrowser
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from typing import Optional, Any, Dict
+from typing import Optional, Any
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -20,7 +17,6 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         if code:
             self.server.code = code  # type: ignore
-            print(f"Authorization code received successfully")
 
             self.send_response(200)
             self.send_header("Content-type", "text/html")
@@ -85,18 +81,13 @@ def run_oauth_flow(
     Returns:
         The authorization code if successful, None if timed out
     """
-    # Start the local server to receive the callback
     server = AuthHTTPServer.run(port)
 
     try:
-        # Open the browser to the authorization URL
         print("\nOpening browser for authorization...")
         webbrowser.open(auth_url)
 
-        # Wait for the callback to be received
         print("Waiting for authorization to complete...")
-
-        # Wait for the server to receive the callback
         waited = 0
         while server.code is None and waited < timeout_seconds:
             time.sleep(1)
@@ -105,7 +96,6 @@ def run_oauth_flow(
             if waited % 30 == 0:
                 print(f"Still waiting for authorization... ({waited} seconds)")
 
-        # Check if we got the authorization code
         if server.code is None:
             print("Error: Timed out waiting for authorization.")
             return None

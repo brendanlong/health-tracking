@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from datetime import date, timedelta
 import sys
 import argparse
 import pandas as pd
@@ -37,10 +38,12 @@ def main() -> None:
     # Get authenticated client
     client = get_fitbit_client()
 
+    end_date = date.today()
+    start_date = end_date - timedelta(days=args.days - 1)
     if args.type == "sleep":
         # Fetch sleep data
         print(f"Fetching sleep data for the past {args.days} days...")
-        data_df = get_sleep_data(client, days=args.days)
+        data_df = get_sleep_data(client, start_date=start_date, end_date=end_date)
 
         # Display summary
         print(f"\nRetrieved {len(data_df)} sleep records")
@@ -48,7 +51,9 @@ def main() -> None:
     elif args.type == "heart-rate":
         # Fetch resting heart rate data
         print(f"Fetching resting heart rate data for the past {args.days} days...")
-        data_df = get_resting_heart_rate(client, days=args.days)
+        data_df = get_resting_heart_rate(
+            client, start_date=start_date, end_date=end_date
+        )
 
         # Display summary
         print(f"\nRetrieved {len(data_df)} heart rate records")

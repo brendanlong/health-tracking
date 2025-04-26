@@ -1,80 +1,84 @@
 import os
-import sys
+from pathlib import Path
 import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+import urllib.parse
+from datetime import date
+from typing import Dict, List, Optional, Any, TypedDict
 import pandas as pd
 from fitbit.api import Fitbit
 
 from health_tracking.auth import run_oauth_flow
 
 # Get Fitbit credentials from environment variables
-CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID", "")
-CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET", "")
-TOKEN_PATH = os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json")
+CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
+TOKEN_PATH = Path(os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json"))
+REDIRECT_URI = f"http://localhost:8080/"
 Fitbit.API_VERSION = 1.2
 
 
-def get_fitbit_client() -> Fitbit:
+class Tokens(TypedDict):
+    access_token: str
+    refresh_token: str
+    expires_at: float
+
+
+class TokenStore:
+    def __init__(self, token_path: Path = TOKEN_PATH) -> None:
+        self.token_path = token_path
+
+    def read(self) -> Optional[Tokens]:
+        try:
+            with self.token_path.open("r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return None
+
+    def write(self, tokens: Tokens) -> None:
+        # Make sure the credentials directory exists
+        self.token_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self.token_path.open("w") as f:
+            json.dump(tokens, f)
+
+
+def get_fitbit_client(
+    client_id: Optional[str] = CLIENT_ID,
+    client_secret: Optional[str] = CLIENT_SECRET,
+    redirect_uri: str = REDIRECT_URI,
+    token_path: Path = TOKEN_PATH,
+) -> Fitbit:
     """Get Fitbit client using authorization code flow with browser-based auth."""
 
-    # Check if we have a token file
-    if os.path.exists(TOKEN_PATH):
-        try:
-            with open(TOKEN_PATH, "r") as token_file:
-                token_data = json.load(token_file)
-                fitbit = Fitbit(
-                    CLIENT_ID,
-                    CLIENT_SECRET,
-                    access_token=token_data.get("access_token"),
-                    refresh_token=token_data.get("refresh_token"),
-                    expires_at=token_data.get("expires_at"),
-                    timeout=10,
-                )
-                # Try refreshing the token if it's expired
-                if (
-                    fitbit.client.session.token.get("expires_at", 0)
-                    < datetime.now().timestamp()
-                ):
-                    fitbit.client.refresh_token()
-                    # Save the refreshed token
-                    token_data = {
-                        "access_token": fitbit.client.session.token.get("access_token"),
-                        "refresh_token": fitbit.client.session.token.get(
-                            "refresh_token"
-                        ),
-                        "expires_at": fitbit.client.session.token.get("expires_at"),
-                    }
-                    # Make sure the credentials directory exists
-                    os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
-                    with open(TOKEN_PATH, "w") as token_file:
-                        json.dump(token_data, token_file)
-                return fitbit
-        except Exception as e:
-            print(f"Error loading token: {e}")
-            # Continue with new authorization
-
     # Check for required credentials
-    if not CLIENT_ID or not CLIENT_SECRET:
-        print(
+    if not client_id or not client_secret:
+        raise ValueError(
             "Error: FITBIT_CLIENT_ID and FITBIT_CLIENT_SECRET environment variables must be set."
         )
-        sys.exit(1)
 
-    # Use port 8080 as required by Fitbit app configuration
-    port = 8080
-    redirect_uri = f"http://localhost:{port}/"
+    token_store = TokenStore(token_path)
 
-    # Create the OAuth2 client with our local server redirect URI
+    try:
+        tokens = token_store.read()
+        if tokens is not None:
+            return Fitbit(
+                client_id,
+                client_secret,
+                tokens["access_token"],
+                tokens["refresh_token"],
+                tokens["expires_at"],
+            )
+    except Exception as e:
+        print(f"Error loading token: {e}")
+        # Continue with new authorization
+
+    # Create the OAuth2 client and run a local server to handle the redirect flow
     fitbit = Fitbit(CLIENT_ID, CLIENT_SECRET, redirect_uri=redirect_uri, timeout=10)
-
-    # Generate authorization URL
     auth_url, _ = fitbit.client.authorize_token_url()
-
-    # Run the OAuth flow
-    auth_code = run_oauth_flow(auth_url, port=port)
-
-    # Check if we got the authorization code
+    auth_port = urllib.parse.urlparse(redirect_uri).port
+    if auth_port is None:
+        auth_port = 80
+    auth_code = run_oauth_flow(auth_url, port=auth_port)
     if auth_code is None:
         raise TimeoutError("Error: Timed out waiting for authorization.")
 
@@ -82,28 +86,20 @@ def get_fitbit_client() -> Fitbit:
     fitbit.client.fetch_access_token(auth_code)
 
     # Save the token for future use
-    token_data = {
-        "access_token": fitbit.client.session.token.get("access_token"),
-        "refresh_token": fitbit.client.session.token.get("refresh_token"),
-        "expires_at": fitbit.client.session.token.get("expires_at"),
-    }
-
-    # Make sure the credentials directory exists
-    os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
-
-    # Save the token
-    with open(TOKEN_PATH, "w") as token_file:
-        json.dump(token_data, token_file)
-        print(f"Credentials saved to {TOKEN_PATH}")
+    tokens = Tokens(
+        access_token=fitbit.client.session.token.get("access_token"),
+        refresh_token=fitbit.client.session.token.get("refresh_token"),
+        expires_at=fitbit.client.session.token.get("expires_at"),
+    )
+    token_store.write(tokens)
 
     return fitbit
 
 
 def get_sleep_data(
     client: Fitbit,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    days: int = 30,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
 ) -> pd.DataFrame:
     """
     Fetch sleep data from Fitbit API and convert to a Pandas DataFrame.
@@ -119,24 +115,21 @@ def get_sleep_data(
     """
     # Set default dates if not provided
     if end_date is None:
-        end_date_dt = datetime.now()
-    else:
-        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d")
-
+        end_date = date.today()
     if start_date is None:
-        start_date_dt = datetime.now() - timedelta(days=days)
-    else:
-        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        start_date = end_date
 
     # Format dates for API
-    start_date_str = start_date_dt.strftime("%Y-%m-%d")
-    end_date_str = end_date_dt.strftime("%Y-%m-%d")
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d")
 
     print(f"Fetching sleep data from {start_date_str} to {end_date_str}...")
 
     # Fetch sleep logs for date range in one API call
     sleep_range_data = client.time_series(
-        resource="sleep", base_date=start_date_str, end_date=end_date_str
+        resource="sleep",
+        base_date=start_date_str,
+        end_date=end_date_str,
     )
 
     # Initialize empty lists to store data
@@ -149,8 +142,11 @@ def get_sleep_data(
         start_time = sleep.get("startTime")
         end_time = sleep.get("endTime")
         duration_mins = (
-            sleep.get("duration") / 60000 if sleep.get("duration") else 0
-        )  # Convert from ms to minutes
+            # Convert from ms to minutes
+            sleep.get("duration") / 60000
+            if sleep.get("duration")
+            else 0
+        )
         efficiency = sleep.get("efficiency")
         is_main_sleep = sleep.get("isMainSleep")
         minutes_asleep = sleep.get("minutesAsleep")
@@ -200,9 +196,8 @@ def get_sleep_data(
 
 def get_resting_heart_rate(
     client: Fitbit,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    days: int = 30,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
 ) -> pd.DataFrame:
     """
     Fetch resting heart rate data from Fitbit API and convert to a Pandas DataFrame.
@@ -218,18 +213,13 @@ def get_resting_heart_rate(
     """
     # Set default dates if not provided
     if end_date is None:
-        end_date_dt = datetime.now()
-    else:
-        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d")
-
+        end_date = date.today()
     if start_date is None:
-        start_date_dt = datetime.now() - timedelta(days=days)
-    else:
-        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        start_date = end_date
 
     # Format dates for API
-    start_date_str = start_date_dt.strftime("%Y-%m-%d")
-    end_date_str = end_date_dt.strftime("%Y-%m-%d")
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d")
 
     print(
         f"Fetching resting heart rate data from {start_date_str} to {end_date_str}..."
