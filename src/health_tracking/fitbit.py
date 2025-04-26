@@ -1,4 +1,6 @@
 import os
+
+
 from pathlib import Path
 import json
 import urllib.parse
@@ -13,7 +15,7 @@ from health_tracking.auth import run_oauth_flow
 CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
 TOKEN_PATH = Path(os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json"))
-REDIRECT_URI = f"http://localhost:8080/"
+REDIRECT_URI = "http://localhost:8080/"
 Fitbit.API_VERSION = 1.2
 
 
@@ -138,14 +140,12 @@ def get_sleep_data(
     # Process each sleep log in the response
     for sleep in sleep_range_data.get("sleep", []):
         # Extract basic sleep data
-        date = sleep.get("dateOfSleep")
+        date_of_sleep = sleep.get("dateOfSleep")
         start_time = sleep.get("startTime")
         end_time = sleep.get("endTime")
         duration_mins = (
             # Convert from ms to minutes
-            sleep.get("duration") / 60000
-            if sleep.get("duration")
-            else 0
+            sleep.get("duration") / 60000 if sleep.get("duration") else 0
         )
         efficiency = sleep.get("efficiency")
         is_main_sleep = sleep.get("isMainSleep")
@@ -165,7 +165,7 @@ def get_sleep_data(
 
         # Create a record with all available data
         record = {
-            "date": date,
+            "date": date_of_sleep,
             "start_time": start_time,
             "end_time": end_time,
             "duration_mins": duration_mins,
@@ -235,7 +235,7 @@ def get_resting_heart_rate(
 
     # Extract data from response
     for day in heart_data.get("activities-heart", []):
-        date = day.get("dateTime")
+        date_of_sleep = day.get("dateTime")
         value = day.get("value", {})
 
         # Extract resting heart rate if available
@@ -243,7 +243,7 @@ def get_resting_heart_rate(
 
         # Only add records that have a resting heart rate value
         if resting_hr is not None:
-            records.append({"date": date, "resting_heart_rate": resting_hr})
+            records.append({"date": date_of_sleep, "resting_heart_rate": resting_hr})
 
     # Convert to DataFrame
     df = pd.DataFrame(records)

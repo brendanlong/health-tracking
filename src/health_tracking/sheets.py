@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import json
-from typing import List, Any, Optional
+from typing import List, Any
 import pandas as pd
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow

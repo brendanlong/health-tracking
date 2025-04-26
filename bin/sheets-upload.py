@@ -8,7 +8,6 @@ import pandas as pd
 sys.path.insert(0, "src")
 from health_tracking.sheets import (
     get_sheets_client,
-    dataframe_to_sheet,
     append_to_sheet,
 )
 

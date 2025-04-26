@@ -1,12 +1,9 @@
-import os
-import sys
-import socket
 import webbrowser
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from typing import Optional, Any, Dict
+from typing import Optional, Any
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -20,7 +17,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         if code:
             self.server.code = code  # type: ignore
-            print(f"Authorization code received successfully")
+            print("Authorization code received successfully")
 
             self.send_response(200)
             self.send_header("Content-type", "text/html")
