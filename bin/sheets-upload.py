@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
-import sys
 import argparse
+import sys
 from pathlib import Path
+
 import pandas as pd
 
 sys.path.insert(0, "src")
 from health_tracking.sheets import (
-    get_sheets_client,
     append_to_sheet,
+    get_sheets_client,
 )
 
 

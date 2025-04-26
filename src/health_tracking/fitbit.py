@@ -1,11 +1,10 @@
-import os
-
-
-from pathlib import Path
 import json
+import os
 import urllib.parse
 from datetime import date
-from typing import Dict, List, Optional, Any, TypedDict
+from pathlib import Path
+from typing import Any, Dict, List, Optional, TypedDict
+
 import pandas as pd
 from fitbit.api import Fitbit
 

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
-from datetime import date, timedelta
-import sys
 import argparse
+import sys
+from datetime import date, timedelta
+
 import pandas as pd
 
 sys.path.insert(0, "src")
 from health_tracking.fitbit import (
     get_fitbit_client,
-    get_sleep_data,
     get_resting_heart_rate,
+    get_sleep_data,
 )
 
 

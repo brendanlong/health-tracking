@@ -1,9 +1,9 @@
-import webbrowser
 import threading
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
-from typing import Optional, Any
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any, Optional
+from urllib.parse import parse_qs, urlparse
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
