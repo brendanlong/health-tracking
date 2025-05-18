@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Health Tracking Data Sync Lambda Function'
+
+Parameters:
+  GoogleCredentialsSecretName:
+    Type: String
+    Default: health-tracking/google-credentials
+    Description: Name of the secret in Secrets Manager that contains Google API credentials
+
+  ECRRepositoryUri:
+    Type: String
+    Description: URI of the ECR repository where the Docker image is stored
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy
+
+  SpreadsheetId:
+    Type: String
+    Description: Google Sheets spreadsheet ID
+
+  SleepSheetName:
+    Type: String
+    Default: Sleep
+    Description: Name of the sheet for sleep data
+
+  HeartRateSheetName:
+    Type: String
+    Default: HeartRate
+    Description: Name of the sheet for heart rate data
+
+  SyncScheduleExpression:
+    Type: String
+    Default: cron(0 1 * * ? *)  # Run at 1:00 AM UTC every day
+    Description: Schedule expression for the daily sync (CloudWatch Events cron syntax)
+
+Resources:
+  GoogleCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Ref GoogleCredentialsSecretName
+      Description: "Google API credentials for health tracking sync"
+
+  # IAM Role for Lambda Function
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref GoogleCredentialsSecret
+
+  # Lambda Function for Sleep Data Sync
+  SleepSyncLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: health-tracking-sleep-sync
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${ECRRepositoryUri}:${ImageTag}
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5 minutes should be enough for syncing
+      MemorySize: 512  # 512 MB of memory
+      Environment:
+        Variables:
+          GOOGLE_CREDENTIALS_SECRET_NAME: !Ref GoogleCredentialsSecretName
+          SPREADSHEET_ID: !Ref SpreadsheetId
+          SHEET_NAME: !Ref SleepSheetName
+          SYNC_TYPE: sleep
+
+  # Lambda Function for Heart Rate Data Sync
+  HeartRateSyncLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: health-tracking-heartrate-sync
+      PackageType: Image
+      Code:
+        ImageUri: !Sub ${ECRRepositoryUri}:${ImageTag}
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5 minutes should be enough for syncing
+      MemorySize: 512  # 512 MB of memory
+      Environment:
+        Variables:
+          GOOGLE_CREDENTIALS_SECRET_NAME: !Ref GoogleCredentialsSecretName
+          SPREADSHEET_ID: !Ref SpreadsheetId
+          SHEET_NAME: !Ref HeartRateSheetName
+          SYNC_TYPE: heart-rate
+
+  # CloudWatch Event Rule for Sleep Data Sync
+  SleepSyncEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Daily trigger for sleep data sync
+      ScheduleExpression: !Ref SyncScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SleepSyncLambdaFunction.Arn
+          Id: sleep-sync-target
+
+  # CloudWatch Event Rule for Heart Rate Data Sync
+  HeartRateSyncEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Daily trigger for heart rate data sync
+      ScheduleExpression: !Ref SyncScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt HeartRateSyncLambdaFunction.Arn
+          Id: heartrate-sync-target
+
+  # Permissions for CloudWatch Events to invoke Lambda
+  SleepSyncPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SleepSyncLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SleepSyncEventRule.Arn
+
+  HeartRateSyncPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref HeartRateSyncLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt HeartRateSyncEventRule.Arn
+
+Outputs:
+  SleepSyncLambdaArn:
+    Description: ARN of the Sleep Sync Lambda function
+    Value: !GetAtt SleepSyncLambdaFunction.Arn
+
+  HeartRateSyncLambdaArn:
+    Description: ARN of the Heart Rate Sync Lambda function
+    Value: !GetAtt HeartRateSyncLambdaFunction.Arn
