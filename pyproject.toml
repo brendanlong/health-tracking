@@ -27,6 +27,7 @@ extend-select = ["I"]
 [dependency-groups]
 dev = [
     "mypy",
+    "pandas-stubs>=2.2.2.240807",
     "pre-commit",
     "ruff",
 ]
