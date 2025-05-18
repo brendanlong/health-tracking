@@ -53,18 +53,20 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    csv_in: str = args.csv_in
+    spreadsheet_id: str = args.spreadsheet_id
+    sheet_name: str = args.sheet_name
+
     # Configure logging
     configure_logging(args.log_level, use_colors=not args.no_color)
 
     # Get authenticated client
     sheets = get_sheets_client()
 
-    spreadsheet_id = args.spreadsheet_id
-
     # Upload CSV to sheet
-    df = pd.read_csv(args.csv_in)
-    logger.info(f"Loaded {len(df)} rows from {args.csv_in}")
-    append_to_sheet(sheets, df, spreadsheet_id, args.sheet_name)
+    df = pd.read_csv(csv_in)
+    logger.info(f"Loaded {len(df)} rows from {csv_in}")
+    append_to_sheet(sheets, df, spreadsheet_id, sheet_name)
 
 
 if __name__ == "__main__":

@@ -101,7 +101,7 @@ def main() -> None:
         start_date = end_date - timedelta(days=default_days - 1)
 
     if start_date > end_date:
-        logger.info(f"Data is already synced up to {latest_date}")
+        logger.info(f"Data is already synced up to {start_date}")
         return
 
     logger.info(f"Fetching {data_type} data from {start_date} to {end_date}...")

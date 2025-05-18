@@ -18,7 +18,7 @@ CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("FITBIT_CLIENT_SECRET")
 TOKEN_PATH = Path(os.environ.get("FITBIT_TOKEN_PATH", "credentials/fitbit_token.json"))
 REDIRECT_URI = "http://localhost:8080/"
-Fitbit.API_VERSION = 1.2
+Fitbit.API_VERSION = 1.2  # type: ignore
 
 
 class Tokens(TypedDict):
@@ -130,7 +130,7 @@ def get_sleep_data(
     logger.info(f"Fetching sleep data from {start_date_str} to {end_date_str}...")
 
     # Fetch sleep logs for date range in one API call
-    sleep_range_data = client.time_series(
+    sleep_range_data: Any = client.time_series(
         resource="sleep",
         base_date=start_date_str,
         end_date=end_date_str,
@@ -228,7 +228,7 @@ def get_resting_heart_rate(
     )
 
     # The Fitbit API endpoint for heart rate time series
-    heart_data = client.time_series(
+    heart_data: Any = client.time_series(
         resource="activities/heart", base_date=start_date_str, end_date=end_date_str
     )
 

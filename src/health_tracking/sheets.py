@@ -2,13 +2,13 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, List
+from typing import Annotated, Any, List
 
 import pandas as pd
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import Resource, build
+from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,10 @@ def sheets_link(spreadsheet_id: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
 
 
-def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> Resource:
+SheetsClient = Annotated[Any, "Google Sheets API client"]
+
+
+def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> SheetsClient:
     """
     Get authenticated Google Sheets client using OAuth 2.0.
 
@@ -60,7 +63,7 @@ def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> Resource:
 
     # If credentials don't exist or are invalid, let the user authorize
     if not creds.valid:
-        if creds is not None and creds.expired and creds.refresh_token:
+        if creds.expired and creds.refresh_token:
             creds.refresh(Request())
 
     # Make sure the credentials directory exists
@@ -72,7 +75,7 @@ def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> Resource:
     return build("sheets", "v4", credentials=creds)
 
 
-def create_spreadsheet(sheets: Resource, title: str) -> str:
+def create_spreadsheet(sheets: SheetsClient, title: str) -> str:
     """
     Create a new Google Sheet with the given title.
 
@@ -90,7 +93,9 @@ def create_spreadsheet(sheets: Resource, title: str) -> str:
     return spreadsheet_id
 
 
-def ensure_sheet_exists(sheets: Resource, spreadsheet_id: str, sheet_name: str) -> None:
+def ensure_sheet_exists(
+    sheets: SheetsClient, spreadsheet_id: str, sheet_name: str
+) -> None:
     """
     Add a new worksheet to an existing spreadsheet.
 
@@ -115,7 +120,7 @@ def ensure_sheet_exists(sheets: Resource, spreadsheet_id: str, sheet_name: str) 
 
 
 def dataframe_to_sheet(
-    sheets: Resource,
+    sheets: SheetsClient,
     df: pd.DataFrame,
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
@@ -165,7 +170,7 @@ def dataframe_to_sheet(
 
 
 def append_to_sheet(
-    sheets: Resource,
+    sheets: SheetsClient,
     df: pd.DataFrame,
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
@@ -211,7 +216,7 @@ def append_to_sheet(
 
 
 def sheet_to_dataframe(
-    sheets: Resource,
+    sheets: SheetsClient,
     spreadsheet_id: str,
     sheet_name: str = "Sheet1",
     has_header: bool = True,

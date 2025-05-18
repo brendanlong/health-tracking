@@ -24,10 +24,18 @@ fitbit-sheets-sync = "bin.fitbit-sheets-sync:main"
 [tool.ruff.lint]
 extend-select = ["I"]
 
+[tool.pyright]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnusedImport = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+
 [dependency-groups]
 dev = [
-    "mypy",
     "pandas-stubs>=2.2.2.240807",
     "pre-commit",
+    "pyright>=1.1.400",
     "ruff",
 ]

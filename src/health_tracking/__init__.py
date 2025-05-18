@@ -4,12 +4,7 @@ import logging
 import sys
 from typing import Literal, Optional, Union
 
-try:
-    import colorlog
-
-    COLORLOG_AVAILABLE = True
-except ImportError:
-    COLORLOG_AVAILABLE = False
+import colorlog
 
 __version__ = "0.1.0"
 
@@ -36,7 +31,7 @@ def configure_logging(
         numeric_level = level
 
     # Use colored output if requested and available
-    if use_colors and COLORLOG_AVAILABLE:
+    if use_colors:
         # Create a colored formatter
         if format_string is None:
             # Default color format string

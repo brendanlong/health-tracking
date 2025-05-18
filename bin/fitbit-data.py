@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 from datetime import date, timedelta
+from typing import Literal
 
 import pandas as pd
 
@@ -55,24 +56,26 @@ def main() -> None:
     # Configure logging
     configure_logging(args.log_level, use_colors=not args.no_color)
 
+    data_type: Literal["sleep", "heart-rate"] = args.type
+    days: int = args.days
+    csv_out: str = args.csv_out
+
     # Get authenticated client
     client = get_fitbit_client()
 
     end_date = date.today()
-    start_date = end_date - timedelta(days=args.days - 1)
-    if args.type == "sleep":
+    start_date = end_date - timedelta(days=days - 1)
+    if data_type == "sleep":
         # Fetch sleep data
-        logger.info(f"Fetching sleep data for the past {args.days} days...")
+        logger.info(f"Fetching sleep data for the past {days} days...")
         data_df = get_sleep_data(client, start_date=start_date, end_date=end_date)
 
         # Display summary
         logger.info(f"Retrieved {len(data_df)} sleep records")
 
-    elif args.type == "heart-rate":
+    elif data_type == "heart-rate":
         # Fetch resting heart rate data
-        logger.info(
-            f"Fetching resting heart rate data for the past {args.days} days..."
-        )
+        logger.info(f"Fetching resting heart rate data for the past {days} days...")
         data_df = get_resting_heart_rate(
             client, start_date=start_date, end_date=end_date
         )
@@ -85,9 +88,9 @@ def main() -> None:
         logger.info(f"Date range: {data_df['date'].min()} to {data_df['date'].max()}")
 
     # Save to CSV if requested
-    if args.csv_out:
-        data_df.to_csv(args.csv_out, index=False)
-        logger.info(f"Data saved to {args.csv_out}")
+    if csv_out:
+        data_df.to_csv(csv_out, index=False)
+        logger.info(f"Data saved to {csv_out}")
     else:
         # Print a preview of the data if in debug mode
         if logger.isEnabledFor(logging.DEBUG):
