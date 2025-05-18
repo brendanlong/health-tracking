@@ -82,9 +82,7 @@ def main() -> None:
 
     # Show date range for either data type
     if not data_df.empty:
-        logger.info(
-            f"Date range: {data_df['date'].min().date()} to {data_df['date'].max().date()}"
-        )
+        logger.info(f"Date range: {data_df['date'].min()} to {data_df['date'].max()}")
 
     # Save to CSV if requested
     if args.csv_out:
