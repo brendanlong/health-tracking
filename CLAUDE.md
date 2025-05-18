@@ -2,3 +2,4 @@
 - Use type annotations when they can't be inferred (like in function signatures).
 - Use the `black` coding style.
 - Avoid comments that just say what the code is doing.
+- Use uv as the package manager

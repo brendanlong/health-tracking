@@ -39,7 +39,7 @@ A Python-based tool to export health data from fitness trackers to Google Sheets
 
 ## Installation
 
-Clone the repository and set up the environment:
+Clone the repository and set up the environment using [uv](https://github.com/astral-sh/uv):
 
 ```bash
 git clone <repository-url>
@@ -129,6 +129,6 @@ health-tracking/
 │       ├── auth.py          # OAuth authentication
 │       ├── fitbit.py        # Fitbit API interaction
 │       └── sheets.py        # Google Sheets integration
-├── setup.py                 # Package installation config
-└── setup.sh                 # Environment setup script
+├── pyproject.toml           # Package configuration and dependency management
+└── setup.sh                 # Environment setup script using uv
 ```

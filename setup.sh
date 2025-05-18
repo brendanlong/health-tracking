@@ -1,21 +1,14 @@
 #!/bin/bash -e
-python3 -m venv venv
 
-# Activate the virtual environment
-source venv/bin/activate
+# Install uv if not already installed
+if ! command -v uv &> /dev/null; then
+    echo "Please install uv: https://github.com/astral-sh/uv?tab=readme-ov-file#installation"
+fi
 
-# Install the requirements
-pip install -r requirements.txt
-
-# Install the package in development mode
-pip install -e .
-
-# Install additional packages for type checking
-mypy --install-types --non-interactive
+# Install dependencies and setup venv
+uv sync
 
 # Install pre-commit hooks
 pre-commit install
 
-echo "Setup complete! You can now use:"
-echo "  bin/fitbit-data.py - Fetch Fitbit data"
-echo "  bin/sheets-upload.py - Interact with Google Sheets"
+echo "Setup complete!"

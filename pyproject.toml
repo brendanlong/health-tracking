@@ -1,6 +1,32 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "health-tracking"
+version = "0.1.0"
+description = "Health data tracking tools"
+requires-python = ">=3.9"
+dependencies = [
+    "fitbit",
+    "pandas",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-api-python-client",
+    "colorlog",
+]
+
+[project.scripts]
+fitbit-data = "bin.fitbit-data:main"
+sheets-upload = "bin.sheets-upload:main"
+fitbit-sheets-sync = "bin.fitbit-sheets-sync:main"
 
 [tool.ruff.lint]
 extend-select = ["I"]
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "pre-commit",
+    "ruff",
+]
