@@ -20,6 +20,18 @@ CREDENTIALS_PATH = Path(
 TOKEN_PATH = Path(os.environ.get("GOOGLE_TOKEN_PATH", "credentials/google_token.json"))
 
 
+class NoSuchSheetException(Exception):
+    def __init__(self, spreadsheet_id: str, sheet_name: str) -> None:
+        super().__init__(
+            f"Sheet {sheet_name} does not exist in spreadsheet {spreadsheet_id}"
+        )
+
+
+def sheets_link(spreadsheet_id: str) -> str:
+    """Create a link to a Google Sheet"""
+    return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+
+
 def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> Resource:
     """
     Get authenticated Google Sheets client using OAuth 2.0.
@@ -129,7 +141,7 @@ def dataframe_to_sheet(
         values.append(list(row))
 
     # Update values
-    body = {"values": values}
+    body = json.loads(json.dumps({"values": values}, default=str))
 
     result = (
         sheets.spreadsheets()
@@ -137,7 +149,7 @@ def dataframe_to_sheet(
         .append(
             spreadsheetId=spreadsheet_id,
             range=f"{sheet_name}!A{start_row}",
-            valueInputOption="RAW",
+            valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body=body,
         )
@@ -213,12 +225,17 @@ def sheet_to_dataframe(
     Returns:
         A pandas DataFrame containing the sheet data
     """
-    result = (
-        sheets.spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range=sheet_name)
-        .execute()
-    )
+    try:
+        result = (
+            sheets.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=sheet_name)
+            .execute()
+        )
+    except Exception as e:
+        if f"Unable to parse range: {sheet_name}" in str(e):
+            raise NoSuchSheetException(spreadsheet_id, sheet_name) from e
+        raise
 
     values = result.get("values", [])
 

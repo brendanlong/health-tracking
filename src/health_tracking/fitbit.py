@@ -183,7 +183,7 @@ def get_sleep_data(
 
     # Convert date columns to datetime
     if not df.empty:
-        df["date"] = pd.to_datetime(df["date"])
+        df["date"] = pd.to_datetime(df["date"]).dt.date
         df["start_time"] = pd.to_datetime(df["start_time"])
         df["end_time"] = pd.to_datetime(df["end_time"])
 
@@ -247,9 +247,10 @@ def get_resting_heart_rate(
     # Convert to DataFrame
     df = pd.DataFrame(records)
 
-    # Convert date column to datetime
+    # Convert date column to date
     if not df.empty:
-        df["date"] = pd.to_datetime(df["date"])
+        # First convert to datetime, then extract just the date part
+        df["date"] = pd.to_datetime(df["date"]).dt.date
         df = df.sort_values("date")
 
     return df
