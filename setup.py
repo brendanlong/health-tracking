@@ -11,6 +11,7 @@ setup(
         "google-auth",
         "google-auth-oauthlib",
         "google-api-python-client",
+        "colorlog",
     ],
     python_requires=">=3.9",
     scripts=[

@@ -1,9 +1,12 @@
+import logging
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -47,8 +50,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(html_content.encode("utf-8"))
 
     def log_message(self, format: str, *args: Any) -> None:
-        """Suppress default HTTP server logging."""
-        return
+        """Send server logs to our logger instead of stderr."""
+        logger.debug(f"HTTP Server: {format % args}")
 
 
 class AuthHTTPServer(HTTPServer):
@@ -84,23 +87,23 @@ def run_oauth_flow(
     server = AuthHTTPServer.run(port)
 
     try:
-        print("\nOpening browser for authorization...")
+        logger.info("Opening browser for authorization...")
         webbrowser.open(auth_url)
 
-        print("Waiting for authorization to complete...")
+        logger.info("Waiting for authorization to complete...")
         waited = 0
         while server.code is None and waited < timeout_seconds:
             time.sleep(1)
             waited += 1
-            # Print a message every 30 seconds
+            # Log a message every 30 seconds
             if waited % 30 == 0:
-                print(f"Still waiting for authorization... ({waited} seconds)")
+                logger.info(f"Still waiting for authorization... ({waited} seconds)")
 
         if server.code is None:
-            print("Error: Timed out waiting for authorization.")
+            logger.error("Timed out waiting for authorization.")
             return None
 
-        print("Authorization code received successfully!")
+        logger.info("Authorization code received successfully!")
         return server.code
 
     finally:

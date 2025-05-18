@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import urllib.parse
 from datetime import date
@@ -9,6 +10,8 @@ import pandas as pd
 from fitbit.api import Fitbit
 
 from health_tracking.auth import run_oauth_flow
+
+logger = logging.getLogger(__name__)
 
 # Get Fitbit credentials from environment variables
 CLIENT_ID = os.environ.get("FITBIT_CLIENT_ID")
@@ -70,7 +73,7 @@ def get_fitbit_client(
                 tokens["expires_at"],
             )
     except Exception as e:
-        print(f"Error loading token: {e}")
+        logger.warning(f"Error loading token: {e}")
         # Continue with new authorization
 
     # Create the OAuth2 client and run a local server to handle the redirect flow
@@ -124,7 +127,7 @@ def get_sleep_data(
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
 
-    print(f"Fetching sleep data from {start_date_str} to {end_date_str}...")
+    logger.info(f"Fetching sleep data from {start_date_str} to {end_date_str}...")
 
     # Fetch sleep logs for date range in one API call
     sleep_range_data = client.time_series(
@@ -220,7 +223,7 @@ def get_resting_heart_rate(
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
 
-    print(
+    logger.info(
         f"Fetching resting heart rate data from {start_date_str} to {end_date_str}..."
     )
 

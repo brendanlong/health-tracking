@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, List
@@ -9,6 +10,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
+
+logger = logging.getLogger(__name__)
 
 # Set up OAuth 2.0 scopes for Google Sheets access
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -83,7 +86,7 @@ def create_spreadsheet(sheets: Resource, title: str) -> str:
     spreadsheet = {"properties": {"title": title}}
     result = sheets.spreadsheets().create(body=spreadsheet).execute()
     spreadsheet_id = result["spreadsheetId"]
-    print(f"Created new spreadsheet: {title} (ID: {spreadsheet_id})")
+    logger.info(f"Created new spreadsheet: {title} (ID: {spreadsheet_id})")
     return spreadsheet_id
 
 
@@ -103,10 +106,10 @@ def ensure_sheet_exists(sheets: Resource, spreadsheet_id: str, sheet_name: str) 
         sheets.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id, body={"requests": [request]}
         ).execute()
-        print(f"Created new sheet: {sheet_name}")
+        logger.info(f"Created new sheet: {sheet_name}")
     except Exception as e:
         if "already exists" in str(e):
-            print(f"Sheet '{sheet_name}' already exists")
+            logger.debug(f"Sheet '{sheet_name}' already exists")
         else:
             raise
 
@@ -158,7 +161,7 @@ def dataframe_to_sheet(
 
     updates = result.get("updates", {})
     updated_cells = updates.get("updatedCells", 0)
-    print(f"{updated_cells} cells appended to {sheet_name}")
+    logger.info(f"{updated_cells} cells appended to {sheet_name}")
 
 
 def append_to_sheet(

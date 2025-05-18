@@ -3,6 +3,7 @@ pandas
 google-auth
 google-auth-oauthlib
 google-api-python-client
+colorlog
 mypy
 pre-commit
 ruff

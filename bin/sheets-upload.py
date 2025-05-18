@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.insert(0, "src")
+from health_tracking import configure_logging
 from health_tracking.sheets import (
     append_to_sheet,
     get_sheets_client,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -34,8 +38,23 @@ def main() -> None:
         default="Sheet1",
         help="Name of the worksheet (default: Sheet1)",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set the logging level",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored log output",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging
+    configure_logging(args.log_level, use_colors=not args.no_color)
 
     # Get authenticated client
     sheets = get_sheets_client()
@@ -44,7 +63,7 @@ def main() -> None:
 
     # Upload CSV to sheet
     df = pd.read_csv(args.csv_in)
-    print(f"Loaded {len(df)} rows from {args.csv_in}")
+    logger.info(f"Loaded {len(df)} rows from {args.csv_in}")
     append_to_sheet(sheets, df, spreadsheet_id, args.sheet_name)
 
 

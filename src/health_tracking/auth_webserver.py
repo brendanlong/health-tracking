@@ -1,9 +1,12 @@
+import logging
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 class OAuthCallbackHandler(BaseHTTPRequestHandler):
@@ -17,7 +20,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
         if code:
             self.server.code = code  # type: ignore
-            print("Authorization code received successfully")
+            logger.info("Authorization code received successfully")
 
             self.send_response(200)
             self.send_header("Content-type", "text/html")
@@ -48,8 +51,8 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(html_content.encode("utf-8"))
 
     def log_message(self, format: str, *args: Any) -> None:
-        """Suppress default HTTP server logging."""
-        return
+        """Send server logs to our logger instead of stderr."""
+        logger.debug(f"HTTP Server: {format % args}")
 
 
 class AuthHTTPServer(HTTPServer):
@@ -87,27 +90,27 @@ def run_oauth_flow(
 
     try:
         # Open the browser to the authorization URL
-        print("\nOpening browser for authorization...")
+        logger.info("Opening browser for authorization...")
         webbrowser.open(auth_url)
 
         # Wait for the callback to be received
-        print("Waiting for authorization to complete...")
+        logger.info("Waiting for authorization to complete...")
 
         # Wait for the server to receive the callback
         waited = 0
         while server.code is None and waited < timeout_seconds:
             time.sleep(1)
             waited += 1
-            # Print a message every 30 seconds
+            # Log a message every 30 seconds
             if waited % 30 == 0:
-                print(f"Still waiting for authorization... ({waited} seconds)")
+                logger.info(f"Still waiting for authorization... ({waited} seconds)")
 
         # Check if we got the authorization code
         if server.code is None:
-            print("Error: Timed out waiting for authorization.")
+            logger.error("Timed out waiting for authorization.")
             return None
 
-        print("Authorization code received successfully!")
+        logger.info("Authorization code received successfully!")
         return server.code
 
     finally:
