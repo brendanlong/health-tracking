@@ -75,7 +75,7 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
             credentials_path = temp_file.name
 
             # Set environment variable for Google credentials
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+            os.environ["GOOGLE_CREDENTIALS_PATH"] = credentials_path
 
             # Build command for sync script
             lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")

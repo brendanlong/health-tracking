@@ -1,5 +1,19 @@
 FROM public.ecr.aws/lambda/python:3.12
 
+# Required Environment Variables:
+# GOOGLE_CREDENTIALS_SECRET_NAME - AWS Secrets Manager secret name containing Google service account credentials
+# SYNC_TYPE - Type of data to sync (e.g., "sleep" or "heart-rate")
+# SPREADSHEET_ID - Google Sheets spreadsheet ID to write to
+# SHEET_NAME - Name of the specific sheet to write to
+#
+# Required for Fitbit authentication:
+# FITBIT_CLIENT_ID - Fitbit API client ID
+# FITBIT_CLIENT_SECRET - Fitbit API client secret
+
+ENV GOOGLE_CREDENTIALS_PATH=/tmp/credentials/google.json
+ENV GOOGLE_TOKEN_PATH=/tmp/credentials/google_token.json
+ENV FITBIT_TOKEN_PATH=/tmp/credentials/fitbit_token.json
+
 # Create a directory for temporary credential files
 RUN mkdir -p /tmp/credentials
 
