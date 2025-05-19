@@ -81,9 +81,11 @@ To update your deployment:
 2. Run the deploy script again with the same parameters
 3. The script will update both stacks as needed
 
-## Manual Testing
+## Testing
 
-To manually invoke the Lambda functions:
+### Manual Testing in AWS
+
+To manually invoke the Lambda functions in AWS:
 
 ```bash
 aws lambda invoke \
@@ -98,3 +100,39 @@ aws lambda invoke \
 ```
 
 Check response.json and the CloudWatch Logs for results.
+
+### Local Testing with Docker
+
+To test the Lambda function locally before deploying to AWS:
+
+1. Build the Docker image:
+   ```bash
+   cd /path/to/health-tracking
+   docker build -f deploy/Dockerfile -t health-tracking-local .
+   ```
+
+2. Run the container with the Lambda Runtime Interface Emulator:
+   ```bash
+   docker run --rm -it \
+     -e SYNC_TYPE=sleep \
+     -e SPREADSHEET_ID=your-spreadsheet-id \
+     -e SHEET_NAME=Sleep \
+     -e GOOGLE_CREDENTIALS_SECRET_NAME=health-tracking/google-credentials \
+     -e AWS_REGION=us-east-1 \
+     -p 9000:8080 \
+     health-tracking-local
+   ```
+
+3. In another terminal, invoke the function with curl:
+   ```bash
+   curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+   ```
+
+   You can also provide custom parameters:
+   ```bash
+   curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{
+     "sync_type": "heart-rate",
+     "spreadsheet_id": "your-spreadsheet-id",
+     "sheet_name": "CustomSheetName"
+   }'
+   ```
