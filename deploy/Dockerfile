@@ -5,6 +5,9 @@ RUN mkdir -p /tmp/credentials
 
 WORKDIR ${LAMBDA_TASK_ROOT}
 
+# Add uv's venv site-packages and our app to the Python path
+ENV PYTHONPATH="${LAMBDA_TASK_ROOT}/.venv/lib/python3.12/site-packages:${LAMBDA_TASK_ROOT}/src:${PYTHONPATH}"
+
 # Copy requirements first for better layer caching
 COPY pyproject.toml uv.lock ./
 RUN pip install uv
