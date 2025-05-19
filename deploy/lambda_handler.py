@@ -2,16 +2,8 @@ import json
 import logging
 import os
 import subprocess
-import sys
 import tempfile
-from typing import Any, Dict, List, Optional, cast
-
-# boto3 and botocore will be available in the Lambda environment
-# We need to pacify the linter by adding these type annotations
-if sys.version_info >= (3, 8):
-    from typing import TypedDict
-else:
-    from typing_extensions import TypedDict
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 
 class AWSContext(TypedDict, total=False):
@@ -77,40 +69,40 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
         # Get Google credentials from Secrets Manager and save to a temporary file
         google_credentials = get_secret()
         with tempfile.NamedTemporaryFile(
-            mode="w+", suffix=".json", delete=False
+            mode="w+", suffix=".json", delete=True
         ) as temp_file:
             temp_file.write(google_credentials)
             credentials_path = temp_file.name
 
-        # Set environment variable for Google credentials
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+            # Set environment variable for Google credentials
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
 
-        # Build command for sync script
-        lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
-        script_path = os.path.join(lambda_task_root, "bin/fitbit-sheets-sync.py")
+            # Build command for sync script
+            lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
+            script_path = os.path.join(lambda_task_root, "bin/fitbit-sheets-sync.py")
 
-        # Use explicit strings for command to satisfy type checker
-        cmd: List[str] = [
-            script_path,
-            "--spreadsheet-id",
-            cast(str, spreadsheet_id),
-            "--sheet-name",
-            cast(str, sheet_name),
-            "--type",
-            cast(str, sync_type),
-        ]
+            # Use explicit strings for command to satisfy type checker
+            cmd: List[str] = [
+                script_path,
+                "--spreadsheet-id",
+                cast(str, spreadsheet_id),
+                "--sheet-name",
+                cast(str, sheet_name),
+                "--type",
+                cast(str, sync_type),
+            ]
 
-        # Execute sync script
-        logger.info(f"Executing command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            # Execute sync script
+            logger.info(f"Executing command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Log result
         logger.info("Sync completed successfully")
         logger.info(f"Output: {result.stdout}")
 
-        # Clean up temporary file
-        if credentials_path:
-            os.unlink(credentials_path)
+        # Log stderr even if the command succeeded (it may contain warnings)
+        if result.stderr:
+            logger.warning(f"Stderr output: {result.stderr}")
 
         return {
             "statusCode": 200,
@@ -123,14 +115,22 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
             ),
         }
 
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command {e.cmd} failed with exit code {e.returncode}")
+        logger.error(f"Stdout: {e.stdout}")
+        logger.error(f"Stderr: {e.stderr}")
+        return {
+            "statusCode": 500,
+            "body": json.dumps(
+                {
+                    "message": f"Error during health data sync: {str(e)}",
+                    "stdout": e.stdout,
+                    "stderr": e.stderr,
+                }
+            ),
+        }
     except Exception as e:
         logger.error(f"Error during health data sync: {str(e)}")
-        if credentials_path:
-            try:
-                os.unlink(credentials_path)
-            except Exception:  # Use explicit Exception instead of bare except
-                pass
-
         return {
             "statusCode": 500,
             "body": json.dumps({"message": f"Error during health data sync: {str(e)}"}),
