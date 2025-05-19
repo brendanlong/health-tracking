@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.12
 
 # Create a directory for temporary credential files
 RUN mkdir -p /tmp/credentials

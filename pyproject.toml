@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "health-tracking"
 version = "0.1.0"
 description = "Health data tracking tools"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "fitbit",
     "pandas",

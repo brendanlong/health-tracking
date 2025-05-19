@@ -11,6 +11,7 @@ Health Tracking is a Python tool that extracts personal health data from Fitbit 
 - `bin/fitbit-sheets-sync.py`: Direct sync from Fitbit to Google Sheets
 
 ## Development Guidelines
+- Assume the availability of Python 3.12 and don't worry about backwards-compatibility
 - Type checking: Use pyright in strict mode (`typeCheckingMode = "strict"` in pyproject.toml)
 - Formatting: Use ruff (similar to black) for code formatting
 - Use pandas for data manipulation and DataFrame-based processing
