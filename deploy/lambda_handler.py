@@ -149,7 +149,7 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
         # Create a copy of the current environment and update it
         env = os.environ.copy()
         result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True, env=env
+            cmd, capture_output=True, text=True, check=True, env=env, timeout=30
         )
 
         # Log result
@@ -171,6 +171,20 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
             ),
         }
 
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Command {e.cmd} timed out after {e.timeout} seconds")
+        logger.error(f"Stdout: {e.stdout if hasattr(e, 'stdout') else 'N/A'}")
+        logger.error(f"Stderr: {e.stderr if hasattr(e, 'stderr') else 'N/A'}")
+        return {
+            "statusCode": 504,
+            "body": json.dumps(
+                {
+                    "message": f"Health data sync timed out after {e.timeout} seconds",
+                    "stdout": e.stdout if hasattr(e, "stdout") else "",
+                    "stderr": e.stderr if hasattr(e, "stderr") else "",
+                }
+            ),
+        }
     except subprocess.CalledProcessError as e:
         logger.error(f"Command {e.cmd} failed with exit code {e.returncode}")
         logger.error(f"Stdout: {e.stdout}")
