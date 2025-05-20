@@ -47,8 +47,8 @@ Parameters:
 
   SyncScheduleExpression:
     Type: String
-    Default: cron(0 1 * * ? *)  # Run at 1:00 AM UTC every day
-    Description: Schedule expression for the daily sync (CloudWatch Events cron syntax)
+    Default: cron(0 14-17 * * ? *)  # Run hourly from 7:00 AM to 10:00 AM PT (14:00-17:00 UTC)
+    Description: Schedule expression for sync (CloudWatch Events cron syntax)
 
 Resources:
   GoogleTokenSecret:
