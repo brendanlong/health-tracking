@@ -73,6 +73,7 @@ def get_fitbit_client(
                 tokens["expires_at"],
             )
             fitbit.client.refresh_token()
+            return fitbit
     except Exception as e:
         logger.warning(f"Error loading token: {e}")
         # Continue with new authorization
