@@ -6,8 +6,9 @@ This guide explains how to deploy the health tracking sync tools to AWS Lambda u
 
 1. AWS CLI installed and configured with appropriate permissions
 2. Docker installed locally
-3. Google Cloud service account credentials (JSON file)
+3. OAuth tokens for Google and Fitbit (JSON files)
 4. A Google Sheet to store your health data
+5. Fitbit API client ID and secret
 
 ## Components
 
@@ -20,6 +21,7 @@ The deployment creates the following AWS resources across two CloudFormation sta
 - Two Lambda functions (for sleep and heart rate data)
 - CloudWatch Event rules for daily scheduling
 - IAM roles with necessary permissions
+- AWS Secrets Manager secrets for storing OAuth tokens
 
 ## Deployment Instructions
 
@@ -28,7 +30,8 @@ The deployment creates the following AWS resources across two CloudFormation sta
 Make sure you have:
 - Your Google Sheets spreadsheet ID
 - Names of the sheets for sleep and heart rate data
-- Path to your Google service account credentials JSON file
+- Path to your Google OAuth token file (credentials/google_token.json)
+- Path to your Fitbit OAuth token file (credentials/fitbit_token.json)
 
 ### 2. Deploy the Application
 
@@ -40,14 +43,17 @@ cd deploy
   --spreadsheet-id YOUR_SPREADSHEET_ID \
   --sleep-sheet "Sleep" \
   --heartrate-sheet "HeartRate" \
-  --google-creds path/to/your-credentials.json
+  --google-token path/to/google_token.json \
+  --fitbit-token path/to/fitbit_token.json \
+  --fitbit-client-id YOUR_FITBIT_CLIENT_ID \
+  --fitbit-client-secret YOUR_FITBIT_CLIENT_SECRET
 ```
 
 The script will:
 1. Deploy the ECR CloudFormation stack to create the ECR repository
 2. Build and push the Docker image to the ECR repository
 3. Deploy the Lambda CloudFormation stack with the Lambda functions and other resources
-4. Update the Google credentials in AWS Secrets Manager
+4. Upload both Google and Fitbit OAuth tokens to AWS Secrets Manager
 
 ### 3. Verify Deployment
 
@@ -117,7 +123,10 @@ To test the Lambda function locally before deploying to AWS:
      -e SYNC_TYPE=sleep \
      -e SPREADSHEET_ID=your-spreadsheet-id \
      -e SHEET_NAME=Sleep \
-     -e GOOGLE_CREDENTIALS_SECRET_NAME=health-tracking/google-credentials \
+     -e GOOGLE_TOKEN_SECRET_NAME=health-tracking/google-token \
+     -e FITBIT_TOKEN_SECRET_NAME=health-tracking/fitbit-token \
+     -e FITBIT_CLIENT_ID=your-fitbit-client-id \
+     -e FITBIT_CLIENT_SECRET=your-fitbit-client-secret \
      -e AWS_REGION=us-east-1 \
      -p 9000:8080 \
      health-tracking-local
@@ -136,3 +145,5 @@ To test the Lambda function locally before deploying to AWS:
      "sheet_name": "CustomSheetName"
    }'
    ```
+
+Note: For local testing, you'll need to have the AWS credentials configured that have access to the Secrets Manager secrets, or you can mount your token files directly as volumes.

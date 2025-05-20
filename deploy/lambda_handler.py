@@ -2,8 +2,8 @@ import json
 import logging
 import os
 import subprocess
-import tempfile
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from pathlib import Path
+from typing import Any, Dict, List, TypedDict, cast
 
 
 class AWSContext(TypedDict, total=False):
@@ -23,17 +23,16 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-def get_secret() -> str:
+def get_secret(secret_name: str) -> str:
     """
-    Retrieve Google API credentials from AWS Secrets Manager
+    Retrieve a secret from AWS Secrets Manager
     """
     # boto3 and botocore will be available in the Lambda environment
     import boto3  # type: ignore
     from botocore.exceptions import ClientError  # type: ignore
 
-    secret_name = os.environ.get("GOOGLE_CREDENTIALS_SECRET_NAME")
     if not secret_name:
-        raise ValueError("GOOGLE_CREDENTIALS_SECRET_NAME environment variable not set")
+        raise ValueError("Secret name cannot be empty")
 
     # Create a Secrets Manager client
     session = boto3.session.Session()
@@ -42,10 +41,72 @@ def get_secret() -> str:
     try:
         get_secret_value_response = client.get_secret_value(SecretId=secret_name)
     except ClientError as e:
-        logger.error(f"Failed to retrieve secret: {e}")
+        logger.error(f"Failed to retrieve secret {secret_name}: {e}")
         raise e
 
     return get_secret_value_response["SecretString"]
+
+
+def setup_oauth_tokens() -> None:
+    """
+    Set up OAuth tokens from AWS Secrets Manager
+    """
+    # Get environment variables for secret names
+    google_token_secret_name = os.environ.get("GOOGLE_TOKEN_SECRET_NAME")
+    fitbit_token_secret_name = os.environ.get("FITBIT_TOKEN_SECRET_NAME")
+    fitbit_client_id_secret_name = os.environ.get("FITBIT_CLIENT_ID_SECRET_NAME")
+    fitbit_client_secret_secret_name = os.environ.get(
+        "FITBIT_CLIENT_SECRET_SECRET_NAME"
+    )
+
+    if not google_token_secret_name:
+        raise ValueError("GOOGLE_TOKEN_SECRET_NAME environment variable not set")
+    if not fitbit_token_secret_name:
+        raise ValueError("FITBIT_TOKEN_SECRET_NAME environment variable not set")
+    if not fitbit_client_id_secret_name:
+        raise ValueError("FITBIT_CLIENT_ID_SECRET_NAME environment variable not set")
+    if not fitbit_client_secret_secret_name:
+        raise ValueError(
+            "FITBIT_CLIENT_SECRET_SECRET_NAME environment variable not set"
+        )
+
+    # Get the credential paths from environment or use defaults
+    google_token_path = os.environ.get(
+        "GOOGLE_TOKEN_PATH", "/tmp/credentials/google_token.json"
+    )
+    fitbit_token_path = os.environ.get(
+        "FITBIT_TOKEN_PATH", "/tmp/credentials/fitbit_token.json"
+    )
+
+    # Make sure the directory exists
+    Path(google_token_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Retrieve and save Google token
+    logger.info(f"Retrieving Google token from {google_token_secret_name}")
+    google_token = get_secret(google_token_secret_name)
+    with open(google_token_path, "w") as f:
+        f.write(google_token)
+    logger.info(f"Saved Google token to {google_token_path}")
+
+    # Retrieve and save Fitbit token
+    logger.info(f"Retrieving Fitbit token from {fitbit_token_secret_name}")
+    fitbit_token = get_secret(fitbit_token_secret_name)
+    with open(fitbit_token_path, "w") as f:
+        f.write(fitbit_token)
+    logger.info(f"Saved Fitbit token to {fitbit_token_path}")
+
+    # Retrieve and set Fitbit client ID and secret as environment variables
+    logger.info(f"Retrieving Fitbit client ID from {fitbit_client_id_secret_name}")
+    fitbit_client_id = get_secret(fitbit_client_id_secret_name)
+    os.environ["FITBIT_CLIENT_ID"] = fitbit_client_id
+    logger.info("Set FITBIT_CLIENT_ID environment variable")
+
+    logger.info(
+        f"Retrieving Fitbit client secret from {fitbit_client_secret_secret_name}"
+    )
+    fitbit_client_secret = get_secret(fitbit_client_secret_secret_name)
+    os.environ["FITBIT_CLIENT_SECRET"] = fitbit_client_secret
+    logger.info("Set FITBIT_CLIENT_SECRET environment variable")
 
 
 def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
@@ -53,7 +114,6 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
     Lambda handler function
     """
     logger.info("Starting health data sync")
-    credentials_path: Optional[str] = None
 
     try:
         # Get configuration from environment or event
@@ -66,35 +126,31 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
                 "Missing required parameters: sync_type, spreadsheet_id, sheet_name"
             )
 
-        # Get Google credentials from Secrets Manager and save to a temporary file
-        google_credentials = get_secret()
-        with tempfile.NamedTemporaryFile(
-            mode="w+", suffix=".json", delete=True
-        ) as temp_file:
-            temp_file.write(google_credentials)
-            credentials_path = temp_file.name
+        # Set up OAuth tokens from AWS Secrets Manager
+        setup_oauth_tokens()
 
-            # Set environment variable for Google credentials
-            os.environ["GOOGLE_CREDENTIALS_PATH"] = credentials_path
+        # Build command for sync script
+        lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
+        script_path = os.path.join(lambda_task_root, "bin/fitbit-sheets-sync.py")
 
-            # Build command for sync script
-            lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
-            script_path = os.path.join(lambda_task_root, "bin/fitbit-sheets-sync.py")
+        # Use explicit strings for command to satisfy type checker
+        cmd: List[str] = [
+            script_path,
+            "--spreadsheet-id",
+            cast(str, spreadsheet_id),
+            "--sheet-name",
+            cast(str, sheet_name),
+            "--type",
+            cast(str, sync_type),
+        ]
 
-            # Use explicit strings for command to satisfy type checker
-            cmd: List[str] = [
-                script_path,
-                "--spreadsheet-id",
-                cast(str, spreadsheet_id),
-                "--sheet-name",
-                cast(str, sheet_name),
-                "--type",
-                cast(str, sync_type),
-            ]
-
-            # Execute sync script
-            logger.info(f"Executing command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # Execute sync script with environment variables
+        logger.info(f"Executing command: {' '.join(cmd)}")
+        # Create a copy of the current environment and update it
+        env = os.environ.copy()
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=True, env=env
+        )
 
         # Log result
         logger.info("Sync completed successfully")

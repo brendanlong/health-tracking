@@ -2,10 +2,25 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Health Tracking Data Sync Lambda Function'
 
 Parameters:
-  GoogleCredentialsSecretName:
+  GoogleTokenSecretName:
     Type: String
-    Default: health-tracking/google-credentials
-    Description: Name of the secret in Secrets Manager that contains Google API credentials
+    Default: health-tracking/google-token
+    Description: Name of the secret in Secrets Manager that contains Google OAuth token
+
+  FitbitTokenSecretName:
+    Type: String
+    Default: health-tracking/fitbit-token
+    Description: Name of the secret in Secrets Manager that contains Fitbit OAuth token
+    
+  FitbitClientIdSecretName:
+    Type: String
+    Default: health-tracking/fitbit-client-id
+    Description: Name of the secret in Secrets Manager that contains Fitbit Client ID
+    
+  FitbitClientSecretSecretName:
+    Type: String
+    Default: health-tracking/fitbit-client-secret
+    Description: Name of the secret in Secrets Manager that contains Fitbit Client Secret
 
   ECRRepositoryUri:
     Type: String
@@ -36,13 +51,37 @@ Parameters:
     Description: Schedule expression for the daily sync (CloudWatch Events cron syntax)
 
 Resources:
-  GoogleCredentialsSecret:
+  GoogleTokenSecret:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      Name: !Ref GoogleCredentialsSecretName
-      Description: "Google API credentials for health tracking sync"
+      Name: !Ref GoogleTokenSecretName
+      Description: "Google OAuth token for health tracking sync"
+  
+  FitbitTokenSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Ref FitbitTokenSecretName
+      Description: "Fitbit OAuth token for health tracking sync"
+      
+  FitbitClientIdSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Ref FitbitClientIdSecretName
+      Description: "Fitbit Client ID for health tracking sync"
+      
+  FitbitClientSecretSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Ref FitbitClientSecretSecretName
+      Description: "Fitbit Client Secret for health tracking sync"
 
   # IAM Role for Lambda Function
   LambdaExecutionRole:
@@ -65,7 +104,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
-                Resource: !Ref GoogleCredentialsSecret
+                Resource: 
+                  - !Ref GoogleTokenSecret
+                  - !Ref FitbitTokenSecret
+                  - !Ref FitbitClientIdSecret
+                  - !Ref FitbitClientSecretSecret
 
   # Lambda Function for Sleep Data Sync
   SleepSyncLambdaFunction:
@@ -80,7 +123,10 @@ Resources:
       MemorySize: 512  # 512 MB of memory
       Environment:
         Variables:
-          GOOGLE_CREDENTIALS_SECRET_NAME: !Ref GoogleCredentialsSecretName
+          GOOGLE_TOKEN_SECRET_NAME: !Ref GoogleTokenSecretName
+          FITBIT_TOKEN_SECRET_NAME: !Ref FitbitTokenSecretName
+          FITBIT_CLIENT_ID_SECRET_NAME: !Ref FitbitClientIdSecretName
+          FITBIT_CLIENT_SECRET_SECRET_NAME: !Ref FitbitClientSecretSecretName
           SPREADSHEET_ID: !Ref SpreadsheetId
           SHEET_NAME: !Ref SleepSheetName
           SYNC_TYPE: sleep
@@ -98,7 +144,10 @@ Resources:
       MemorySize: 512  # 512 MB of memory
       Environment:
         Variables:
-          GOOGLE_CREDENTIALS_SECRET_NAME: !Ref GoogleCredentialsSecretName
+          GOOGLE_TOKEN_SECRET_NAME: !Ref GoogleTokenSecretName
+          FITBIT_TOKEN_SECRET_NAME: !Ref FitbitTokenSecretName
+          FITBIT_CLIENT_ID_SECRET_NAME: !Ref FitbitClientIdSecretName
+          FITBIT_CLIENT_SECRET_SECRET_NAME: !Ref FitbitClientSecretSecretName
           SPREADSHEET_ID: !Ref SpreadsheetId
           SHEET_NAME: !Ref HeartRateSheetName
           SYNC_TYPE: heart-rate
