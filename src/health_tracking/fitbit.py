@@ -39,6 +39,8 @@ class TokenStore:
             return None
 
     def write(self, tokens: Tokens) -> None:
+        logger.debug("Saving new Fitbit OAuth token")
+
         # Make sure the credentials directory exists
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -65,15 +67,14 @@ def get_fitbit_client(
     try:
         tokens = token_store.read()
         if tokens is not None:
-            fitbit = Fitbit(
+            return Fitbit(
                 client_id,
                 client_secret,
                 tokens["access_token"],
                 tokens["refresh_token"],
                 tokens["expires_at"],
+                refresh_cb=token_store.write,
             )
-            fitbit.client.refresh_token()
-            return fitbit
     except Exception as e:
         logger.warning(f"Error loading token: {e}")
         # Continue with new authorization
@@ -92,12 +93,7 @@ def get_fitbit_client(
     fitbit.client.fetch_access_token(auth_code)
 
     # Save the token for future use
-    tokens = Tokens(
-        access_token=fitbit.client.session.token.get("access_token"),
-        refresh_token=fitbit.client.session.token.get("refresh_token"),
-        expires_at=fitbit.client.session.token.get("expires_at"),
-    )
-    token_store.write(tokens)
+    token_store.write(fitbit.client.session.token)
 
     return fitbit
 
