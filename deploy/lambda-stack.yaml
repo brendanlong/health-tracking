@@ -45,10 +45,15 @@ Parameters:
     Default: HeartRate
     Description: Name of the sheet for heart rate data
 
-  SyncScheduleExpression:
+  SleepSyncScheduleExpression:
     Type: String
-    Default: cron(0 14-17 * * ? *)  # Run hourly from 7:00 AM to 10:00 AM PT (14:00-17:00 UTC)
-    Description: Schedule expression for sync (CloudWatch Events cron syntax)
+    Default: cron(0 14,16 * * ? *)  # Run at 7:00 AM and 9:00 AM PT (14:00 and 16:00 UTC)
+    Description: Schedule expression for sleep data sync (CloudWatch Events cron syntax)
+
+  HeartRateSyncScheduleExpression:
+    Type: String
+    Default: cron(30 15,17 * * ? *)  # Run at 8:30 AM and 10:30 AM PT (15:30 and 17:30 UTC)
+    Description: Schedule expression for heart rate data sync (CloudWatch Events cron syntax)
 
   NotificationEmail:
     Type: String
@@ -109,6 +114,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
+                  - secretsmanager:UpdateSecret
                 Resource: 
                   - !Ref GoogleTokenSecret
                   - !Ref FitbitTokenSecret
@@ -162,7 +168,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: Daily trigger for sleep data sync
-      ScheduleExpression: !Ref SyncScheduleExpression
+      ScheduleExpression: !Ref SleepSyncScheduleExpression
       State: ENABLED
       Targets:
         - Arn: !GetAtt SleepSyncLambdaFunction.Arn
@@ -173,7 +179,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: Daily trigger for heart rate data sync
-      ScheduleExpression: !Ref SyncScheduleExpression
+      ScheduleExpression: !Ref HeartRateSyncScheduleExpression
       State: ENABLED
       Targets:
         - Arn: !GetAtt HeartRateSyncLambdaFunction.Arn

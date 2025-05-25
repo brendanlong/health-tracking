@@ -5,6 +5,23 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict, cast
 
+# boto3 and botocore will be available in the Lambda environment
+import boto3  # type: ignore
+from botocore.exceptions import ClientError  # type: ignore
+
+# Environment variable constants
+GOOGLE_TOKEN_SECRET_NAME = os.environ.get("GOOGLE_TOKEN_SECRET_NAME")
+FITBIT_TOKEN_SECRET_NAME = os.environ.get("FITBIT_TOKEN_SECRET_NAME")
+FITBIT_CLIENT_ID_SECRET_NAME = os.environ.get("FITBIT_CLIENT_ID_SECRET_NAME")
+FITBIT_CLIENT_SECRET_SECRET_NAME = os.environ.get("FITBIT_CLIENT_SECRET_SECRET_NAME")
+GOOGLE_TOKEN_PATH = Path(
+    os.environ.get("GOOGLE_TOKEN_PATH", "/tmp/credentials/google_token.json")
+)
+FITBIT_TOKEN_PATH = Path(
+    os.environ.get("FITBIT_TOKEN_PATH", "/tmp/credentials/fitbit_token.json")
+)
+LAMBDA_TASK_ROOT = Path(os.environ.get("LAMBDA_TASK_ROOT", ""))
+
 
 class AWSContext(TypedDict, total=False):
     """Lambda context object type hint."""
@@ -27,10 +44,6 @@ def get_secret(secret_name: str) -> str:
     """
     Retrieve a secret from AWS Secrets Manager
     """
-    # boto3 and botocore will be available in the Lambda environment
-    import boto3  # type: ignore
-    from botocore.exceptions import ClientError  # type: ignore
-
     if not secret_name:
         raise ValueError("Secret name cannot be empty")
 
@@ -41,75 +54,100 @@ def get_secret(secret_name: str) -> str:
     try:
         get_secret_value_response = client.get_secret_value(SecretId=secret_name)
     except ClientError as e:
-        logger.error(f"Failed to retrieve secret {secret_name}: {e}")
-        raise e
+        raise ValueError(f"Failed to retrieve secret {secret_name}") from e
 
     return get_secret_value_response["SecretString"]
+
+
+def update_secret(secret_name: str, secret_value: str) -> None:
+    """
+    Update a secret in AWS Secrets Manager
+    """
+    if not secret_name:
+        raise ValueError("Secret name cannot be empty")
+
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(service_name="secretsmanager")
+
+    try:
+        client.update_secret(SecretId=secret_name, SecretString=secret_value)
+        logger.info(f"Successfully updated secret {secret_name}")
+    except ClientError as e:
+        raise ValueError(f"Failed to update secret {secret_name}") from e
 
 
 def setup_oauth_tokens() -> None:
     """
     Set up OAuth tokens from AWS Secrets Manager
     """
-    # Get environment variables for secret names
-    google_token_secret_name = os.environ.get("GOOGLE_TOKEN_SECRET_NAME")
-    fitbit_token_secret_name = os.environ.get("FITBIT_TOKEN_SECRET_NAME")
-    fitbit_client_id_secret_name = os.environ.get("FITBIT_CLIENT_ID_SECRET_NAME")
-    fitbit_client_secret_secret_name = os.environ.get(
-        "FITBIT_CLIENT_SECRET_SECRET_NAME"
-    )
-
-    if not google_token_secret_name:
+    if not GOOGLE_TOKEN_SECRET_NAME:
         raise ValueError("GOOGLE_TOKEN_SECRET_NAME environment variable not set")
-    if not fitbit_token_secret_name:
+    if not FITBIT_TOKEN_SECRET_NAME:
         raise ValueError("FITBIT_TOKEN_SECRET_NAME environment variable not set")
-    if not fitbit_client_id_secret_name:
+    if not FITBIT_CLIENT_ID_SECRET_NAME:
         raise ValueError("FITBIT_CLIENT_ID_SECRET_NAME environment variable not set")
-    if not fitbit_client_secret_secret_name:
+    if not FITBIT_CLIENT_SECRET_SECRET_NAME:
         raise ValueError(
             "FITBIT_CLIENT_SECRET_SECRET_NAME environment variable not set"
         )
 
-    # Get the credential paths from environment or use defaults
-    google_token_path = os.environ.get(
-        "GOOGLE_TOKEN_PATH", "/tmp/credentials/google_token.json"
-    )
-    fitbit_token_path = os.environ.get(
-        "FITBIT_TOKEN_PATH", "/tmp/credentials/fitbit_token.json"
-    )
-
     # Make sure the directory exists
-    Path(google_token_path).parent.mkdir(parents=True, exist_ok=True)
+    GOOGLE_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # Retrieve and save Google token
-    logger.info(f"Retrieving Google token from {google_token_secret_name}")
-    google_token = get_secret(google_token_secret_name)
-    with open(google_token_path, "w") as f:
-        f.write(google_token)
-    logger.info(f"Saved Google token to {google_token_path}")
+    logger.info(f"Retrieving Google token from {GOOGLE_TOKEN_SECRET_NAME}")
+    google_token = get_secret(GOOGLE_TOKEN_SECRET_NAME)
+    GOOGLE_TOKEN_PATH.write_text(google_token)
+    logger.info(f"Saved Google token to {GOOGLE_TOKEN_PATH}")
 
     # Retrieve and save Fitbit token
-    logger.info(f"Retrieving Fitbit token from {fitbit_token_secret_name}")
-    fitbit_token = get_secret(fitbit_token_secret_name)
-    with open(fitbit_token_path, "w") as f:
-        f.write(fitbit_token)
-    logger.info(f"Saved Fitbit token to {fitbit_token_path}")
+    logger.info(f"Retrieving Fitbit token from {FITBIT_TOKEN_SECRET_NAME}")
+    fitbit_token = get_secret(FITBIT_TOKEN_SECRET_NAME)
+    FITBIT_TOKEN_PATH.write_text(fitbit_token)
+    logger.info(f"Saved Fitbit token to {FITBIT_TOKEN_PATH}")
 
     # Retrieve and set Fitbit client ID and secret as environment variables
-    logger.info(f"Retrieving Fitbit client ID from {fitbit_client_id_secret_name}")
-    fitbit_client_id = get_secret(fitbit_client_id_secret_name)
+    logger.info(f"Retrieving Fitbit client ID from {FITBIT_CLIENT_ID_SECRET_NAME}")
+    fitbit_client_id = get_secret(FITBIT_CLIENT_ID_SECRET_NAME)
     os.environ["FITBIT_CLIENT_ID"] = fitbit_client_id
     logger.info("Set FITBIT_CLIENT_ID environment variable")
 
     logger.info(
-        f"Retrieving Fitbit client secret from {fitbit_client_secret_secret_name}"
+        f"Retrieving Fitbit client secret from {FITBIT_CLIENT_SECRET_SECRET_NAME}"
     )
-    fitbit_client_secret = get_secret(fitbit_client_secret_secret_name)
+    fitbit_client_secret = get_secret(FITBIT_CLIENT_SECRET_SECRET_NAME)
     os.environ["FITBIT_CLIENT_SECRET"] = fitbit_client_secret
     logger.info("Set FITBIT_CLIENT_SECRET environment variable")
 
 
-def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
+def upload_refreshed_fitbit_tokens() -> None:
+    """
+    Upload refreshed Fitbit tokens back to AWS Secrets Manager
+    """
+    if not FITBIT_TOKEN_SECRET_NAME:
+        logger.warning("FITBIT_TOKEN_SECRET_NAME not set, skipping token upload")
+        return
+
+    # Check if the token file exists and has been updated
+    if not FITBIT_TOKEN_PATH.exists():
+        logger.warning(f"Fitbit token file not found at {FITBIT_TOKEN_PATH}")
+        return
+
+    try:
+        # Read the updated token file
+        updated_token_content = FITBIT_TOKEN_PATH.read_text()
+
+        # Upload the updated token to Secrets Manager
+        logger.info(f"Uploading refreshed Fitbit tokens to {FITBIT_TOKEN_SECRET_NAME}")
+        update_secret(FITBIT_TOKEN_SECRET_NAME, updated_token_content)
+
+    except Exception as e:
+        logger.error(f"Failed to upload refreshed Fitbit tokens: {e}")
+        # Don't raise the exception as this shouldn't fail the main sync operation
+
+
+def handler(event: Dict[str, Any], _context: AWSContext) -> Dict[str, Any]:
     """
     Lambda handler function
     """
@@ -130,8 +168,7 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
         setup_oauth_tokens()
 
         # Build command for sync script
-        lambda_task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
-        script_path = os.path.join(lambda_task_root, "bin/fitbit-sheets-sync.py")
+        script_path = str(LAMBDA_TASK_ROOT / "bin" / "fitbit-sheets-sync.py")
 
         # Use explicit strings for command to satisfy type checker
         cmd: List[str] = [
@@ -160,6 +197,9 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
         # Log stderr even if the command succeeded (it may contain warnings)
         if result.stderr:
             logger.warning(f"Stderr output: {result.stderr}")
+
+        # Upload any refreshed Fitbit tokens back to Secrets Manager
+        upload_refreshed_fitbit_tokens()
 
         return {
             "statusCode": 200,
