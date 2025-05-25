@@ -50,6 +50,11 @@ Parameters:
     Default: cron(0 14-17 * * ? *)  # Run hourly from 7:00 AM to 10:00 AM PT (14:00-17:00 UTC)
     Description: Schedule expression for sync (CloudWatch Events cron syntax)
 
+  NotificationEmail:
+    Type: String
+    Default: self@brendanlong.com
+    Description: Email address for failure notifications
+
 Resources:
   GoogleTokenSecret:
     Type: AWS::SecretsManager::Secret
@@ -190,6 +195,55 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt HeartRateSyncEventRule.Arn
+
+  # SNS Topic for Failure Notifications
+  FailureNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: health-tracking-sync-failures
+      DisplayName: Health Tracking Sync Failures
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref NotificationEmail
+
+  # CloudWatch Alarms for Lambda Failures
+  SleepSyncFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: health-tracking-sleep-sync-failures
+      AlarmDescription: Alert when sleep sync lambda fails
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SleepSyncLambdaFunction
+      AlarmActions:
+        - !Ref FailureNotificationTopic
+      TreatMissingData: notBreaching
+
+  HeartRateSyncFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: health-tracking-heartrate-sync-failures
+      AlarmDescription: Alert when heart rate sync lambda fails
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 86400  # 24 hours
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HeartRateSyncLambdaFunction
+      AlarmActions:
+        - !Ref FailureNotificationTopic
+      TreatMissingData: notBreaching
 
 Outputs:
   SleepSyncLambdaArn:
