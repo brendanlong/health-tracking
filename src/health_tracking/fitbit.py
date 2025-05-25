@@ -67,7 +67,7 @@ def get_fitbit_client(
     try:
         tokens = token_store.read()
         if tokens is not None:
-            return Fitbit(
+            fitbit = Fitbit(
                 client_id,
                 client_secret,
                 tokens["access_token"],
@@ -75,6 +75,8 @@ def get_fitbit_client(
                 tokens["expires_at"],
                 refresh_cb=token_store.write,
             )
+            fitbit.client.refresh_token()
+            return fitbit
     except Exception as e:
         logger.warning(f"Error loading token: {e}")
         # Continue with new authorization
