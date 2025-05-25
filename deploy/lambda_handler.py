@@ -142,6 +142,7 @@ def handler(event: Dict[str, Any], context: AWSContext) -> Dict[str, Any]:
             cast(str, sheet_name),
             "--type",
             cast(str, sync_type),
+            "--no-color",
         ]
 
         # Execute sync script with environment variables
