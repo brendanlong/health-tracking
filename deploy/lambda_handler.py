@@ -186,17 +186,23 @@ def handler(event: Dict[str, Any], _context: AWSContext) -> Dict[str, Any]:
         logger.info(f"Executing command: {' '.join(cmd)}")
         # Create a copy of the current environment and update it
         env = os.environ.copy()
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=True, env=env, timeout=30
-        )
+
+        # Stream output line by line
+        with subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+        ) as process:
+            if process.stdout:
+                for line in process.stdout:
+                    line = line.rstrip()
+                    if line:
+                        logger.info(line)
+
+            return_code = process.wait(timeout=30)
+            if return_code != 0:
+                raise subprocess.CalledProcessError(return_code, cmd)
 
         # Log result
         logger.info("Sync completed successfully")
-        logger.info(f"Output: {result.stdout}")
-
-        # Log stderr even if the command succeeded (it may contain warnings)
-        if result.stderr:
-            logger.warning(f"Stderr output: {result.stderr}")
 
         # Upload any refreshed Fitbit tokens back to Secrets Manager
         upload_refreshed_fitbit_tokens()
