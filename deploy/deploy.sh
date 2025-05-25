@@ -19,10 +19,10 @@ usage() {
   echo "  --spreadsheet-id <id>     (required) Google Sheets spreadsheet ID"
   echo "  --sleep-sheet <name>      (optional) Name of the sheet for sleep data (default: Sleep)"
   echo "  --heartrate-sheet <name>  (optional) Name of the sheet for heart rate data (default: HeartRate)"
-  echo "  --google-token <path>     (required) Path to Google OAuth token JSON file"
-  echo "  --fitbit-token <path>     (required) Path to Fitbit OAuth token JSON file"
-  echo "  --fitbit-client-id <id>   (required) Fitbit API client ID"
-  echo "  --fitbit-client-secret <secret> (required) Fitbit API client secret"
+  echo "  --google-token <path>     (optional) Path to Google OAuth token JSON file"
+  echo "  --fitbit-token <path>     (optional) Path to Fitbit OAuth token JSON file"
+  echo "  --fitbit-client-id <id>   (optional) Fitbit API client ID"
+  echo "  --fitbit-client-secret <secret> (optional) Fitbit API client secret"
   echo "  --region <region>         (optional) AWS region (default: $AWS_REGION)"
   echo "  --help                    Display this help message"
   exit 1
@@ -87,34 +87,15 @@ if [ -z "$SPREADSHEET_ID" ]; then
   usage
 fi
 
-if [ -z "$GOOGLE_TOKEN_PATH" ]; then
-  echo "Error: --google-token is required"
-  usage
-fi
-
-if [ ! -f "$GOOGLE_TOKEN_PATH" ]; then
+# Validate that secret files exist if provided
+if [ -n "$GOOGLE_TOKEN_PATH" ] && [ ! -f "$GOOGLE_TOKEN_PATH" ]; then
   echo "Error: Google token file not found at $GOOGLE_TOKEN_PATH"
   exit 1
 fi
 
-if [ -z "$FITBIT_TOKEN_PATH" ]; then
-  echo "Error: --fitbit-token is required"
-  usage
-fi
-
-if [ ! -f "$FITBIT_TOKEN_PATH" ]; then
+if [ -n "$FITBIT_TOKEN_PATH" ] && [ ! -f "$FITBIT_TOKEN_PATH" ]; then
   echo "Error: Fitbit token file not found at $FITBIT_TOKEN_PATH"
   exit 1
-fi
-
-if [ -z "$FITBIT_CLIENT_ID" ]; then
-  echo "Error: --fitbit-client-id is required"
-  usage
-fi
-
-if [ -z "$FITBIT_CLIENT_SECRET" ]; then
-  echo "Error: --fitbit-client-secret is required"
-  usage
 fi
 
 # Ensure AWS CLI is installed
@@ -184,30 +165,46 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_IAM \
   --region "$AWS_REGION"
 
-# Step 5: Update the secrets with the actual tokens
-echo "Updating Google token in AWS Secrets Manager..."
-aws secretsmanager update-secret \
-  --secret-id "$GOOGLE_TOKEN_SECRET_NAME" \
-  --secret-string file://"$GOOGLE_TOKEN_PATH" \
-  --region "$AWS_REGION"
+# Step 5: Update the secrets with the actual tokens (only if provided)
+if [ -n "$GOOGLE_TOKEN_PATH" ]; then
+  echo "Updating Google token in AWS Secrets Manager..."
+  aws secretsmanager update-secret \
+    --secret-id "$GOOGLE_TOKEN_SECRET_NAME" \
+    --secret-string file://"$GOOGLE_TOKEN_PATH" \
+    --region "$AWS_REGION"
+else
+  echo "Skipping Google token update (not provided)"
+fi
 
-echo "Updating Fitbit token in AWS Secrets Manager..."
-aws secretsmanager update-secret \
-  --secret-id "$FITBIT_TOKEN_SECRET_NAME" \
-  --secret-string file://"$FITBIT_TOKEN_PATH" \
-  --region "$AWS_REGION"
+if [ -n "$FITBIT_TOKEN_PATH" ]; then
+  echo "Updating Fitbit token in AWS Secrets Manager..."
+  aws secretsmanager update-secret \
+    --secret-id "$FITBIT_TOKEN_SECRET_NAME" \
+    --secret-string file://"$FITBIT_TOKEN_PATH" \
+    --region "$AWS_REGION"
+else
+  echo "Skipping Fitbit token update (not provided)"
+fi
 
-echo "Updating Fitbit client ID in AWS Secrets Manager..."
-aws secretsmanager update-secret \
-  --secret-id "$FITBIT_CLIENT_ID_SECRET_NAME" \
-  --secret-string "$FITBIT_CLIENT_ID" \
-  --region "$AWS_REGION"
+if [ -n "$FITBIT_CLIENT_ID" ]; then
+  echo "Updating Fitbit client ID in AWS Secrets Manager..."
+  aws secretsmanager update-secret \
+    --secret-id "$FITBIT_CLIENT_ID_SECRET_NAME" \
+    --secret-string "$FITBIT_CLIENT_ID" \
+    --region "$AWS_REGION"
+else
+  echo "Skipping Fitbit client ID update (not provided)"
+fi
 
-echo "Updating Fitbit client secret in AWS Secrets Manager..."
-aws secretsmanager update-secret \
-  --secret-id "$FITBIT_CLIENT_SECRET_SECRET_NAME" \
-  --secret-string "$FITBIT_CLIENT_SECRET" \
-  --region "$AWS_REGION"
+if [ -n "$FITBIT_CLIENT_SECRET" ]; then
+  echo "Updating Fitbit client secret in AWS Secrets Manager..."
+  aws secretsmanager update-secret \
+    --secret-id "$FITBIT_CLIENT_SECRET_SECRET_NAME" \
+    --secret-string "$FITBIT_CLIENT_SECRET" \
+    --region "$AWS_REGION"
+else
+  echo "Skipping Fitbit client secret update (not provided)"
+fi
 
 echo "Deployment completed successfully!"
 echo "Lambda stack name: $LAMBDA_STACK_NAME"
