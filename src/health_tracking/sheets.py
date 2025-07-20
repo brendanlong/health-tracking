@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Annotated, Any, List
 
 import pandas as pd
+from google.auth.exceptions import RefreshError
+from google.auth.external_account_authorized_user import Credentials as UserCredentials
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -38,6 +40,18 @@ def sheets_link(spreadsheet_id: str) -> str:
 SheetsClient = Annotated[Any, "Google Sheets API client"]
 
 
+def get_token_via_oauth(credentials_path: Path) -> Credentials | UserCredentials:
+    if not credentials_path.exists():
+        raise ValueError(
+            f"Error: Google API credentials file not found at {credentials_path}."
+            "Please create a project in Google Cloud Console, enable the Sheets API,"
+            "and download the OAuth 2.0 credentials to this location."
+        )
+
+    flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
+    return flow.run_local_server(port=0)
+
+
 def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> SheetsClient:
     """
     Get authenticated Google Sheets client using OAuth 2.0.
@@ -50,21 +64,18 @@ def get_sheets_client(credentials_path: Path = CREDENTIALS_PATH) -> SheetsClient
         with TOKEN_PATH.open("r") as f:
             creds = Credentials.from_authorized_user_info(json.load(f), SCOPES)
     except FileNotFoundError:
-        if not credentials_path.exists():
-            raise ValueError(
-                f"Error: Google API credentials file not found at {credentials_path}."
-                "Please create a project in Google Cloud Console, enable the Sheets API,"
-                "and download the OAuth 2.0 credentials to this location."
-            )
+        creds = get_token_via_oauth(credentials_path)
 
-        # Start the OAuth flow
-        flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
-        creds = flow.run_local_server(port=0)
+    # Try to refresh if necessary
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            logger.error("Failed to refresh token: %s", e)
 
     # If credentials don't exist or are invalid, let the user authorize
     if not creds.valid:
-        if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+        creds = get_token_via_oauth(credentials_path)
 
     # Make sure the credentials directory exists
     TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
